@@ -57,6 +57,8 @@
 
 每个镜头渲完后用 `am scene frames <镜头目录>` 抽帧，默认在首帧、四分位和末帧各抽一张 PNG，然后逐张打开看。第 0 帧要做封面时加 `--at 0 --check-blank`，空白帧会直接判失败。
 
+静帧看不出动作：入场、阶段切换和转场用 `--strip 开始:结束` 把该段每一帧拼成一张条带图，看有没有一帧蹦出或闪烁、是否全程匀速、几个元素是否同一帧齐动。小字号文字用 `--crop x,y,宽,高` 在原始分辨率下确认可读。
+
 抽帧命令只负责把 mp4 变成可以看的 PNG，并标出纯色帧这种机器能判的情况；画面对不对要你自己看图判断。发现问题只重渲染相关镜头。
 
 调度时加上 `--report-json production/run-report.json`，得到一份机器可读的执行报告，不要靠解析屏幕上的中文汇总来判断结果。报告结构：
@@ -108,7 +110,7 @@
 
 拼完后用 `am validate video final.mp4 --silent --decode --check-frame-zero` 做一次机器验收，不通过就不要交付。
 
-再用 `am review final.mp4 --scenes scenes/ --silent --out production/review` 做整片复查：它精确统计总帧数并与各镜头帧数之和比对（漏拼、重拼、掉帧都会被拦下），检查每个镜头交界两侧的帧，并把每个镜头的首帧、中间帧、末帧拼成联系表。判断结果读 `production/review/review.json`；机器检查通过后逐页打开 `sheet-NN.png`，看相邻镜头的风格与密度是否一致、交界是否跳变突兀、结尾是否停在合适的画面。有问题只重渲染相关镜头，重新拼接后再复查一次。
+再用 `am review final.mp4 --scenes scenes/ --silent --out production/review` 做整片复查：它精确统计总帧数并与各镜头帧数之和比对（漏拼、重拼、掉帧都会被拦下），检查每个镜头交界两侧的帧，并把每个镜头的首帧、中间帧、末帧拼成联系表，每个交界再出一张前后各 6 帧的条带 `seam-NN.png`。判断结果读 `production/review/review.json`；机器检查通过后逐页打开 `sheet-NN.png`，看相邻镜头的风格与密度是否一致、结尾是否停在合适的画面，再逐张看 `seam-NN.png` 确认每个交界的转场顺畅。有问题只重渲染相关镜头，重新拼接后再复查一次。
 
 最终交付：
 

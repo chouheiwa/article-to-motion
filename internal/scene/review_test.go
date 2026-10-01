@@ -151,3 +151,13 @@ func TestBuildPromptCarriesRenderWorkerBudget(t *testing.T) {
 		t.Error("WithRenderWorkers 不得修改原镜头")
 	}
 }
+
+// TestSelfReviewCoversMotionNotOnlyStills：静帧看不出动作。代码写的动画最常见的
+// 毛病——一帧蹦出、匀速、齐动、信息点抢拍——只有连续帧能看出来。
+func TestSelfReviewCoversMotionNotOnlyStills(t *testing.T) {
+	for _, want := range []string{"连续截取该段的每一帧", "一帧蹦出", "同一帧、以同一幅度齐动", "上一个信息点读完之前", "自查量下限"} {
+		if !strings.Contains(selfReviewSection, want) {
+			t.Errorf("画面自查缺少 %q", want)
+		}
+	}
+}

@@ -24,6 +24,10 @@ type Prober interface {
 	ContactSheet(path string, atSeconds []float64, columns, thumbWidth int, dest string) error
 }
 
+// SeamFrames 是交界条带在切点两侧各取的帧数：30fps 下前后各 0.2 秒，正好覆盖
+// 一次转场的收尾与起势。只看切点两侧各一帧，判断不了转场是否顺。
+const SeamFrames = 6
+
 // Segment 是成片里按顺序首尾相接的一个镜头。
 type Segment struct {
 	ID     string
@@ -83,6 +87,8 @@ type Report struct {
 	Hints          []string         `json:"hints,omitempty"`
 	Cuts           []Cut            `json:"cuts,omitempty"`
 	Sheets         []Sheet          `json:"sheets"`
+	// Seams 是每个镜头交界的逐帧条带，切点在第 SeamFrames+1 格。
+	Seams []Sheet `json:"seams,omitempty"`
 }
 
 // ReportSchemaVersion 是 Report 的结构版本。
@@ -164,6 +170,9 @@ func Run(p Prober, opts Options) (Report, error) {
 		}
 	}
 	if err := writeSheets(p, &report, opts); err != nil {
+		return Report{}, err
+	}
+	if err := writeSeams(p, &report, opts); err != nil {
 		return Report{}, err
 	}
 	report.OK = len(report.Problems) == 0
@@ -287,6 +296,30 @@ func writeSheets(p Prober, report *Report, opts Options) error {
 			return err
 		}
 		report.Sheets = append(report.Sheets, Sheet{Image: image, Columns: columns, Tiles: chunk})
+	}
+	return nil
+}
+
+// writeSeams 为每个落在成片范围内的交界出一张逐帧条带。
+func writeSeams(p Prober, report *Report, opts Options) error {
+	for i, cut := range report.Cuts {
+		var tiles []Tile
+		for frame := max(0, cut.Frame-SeamFrames); frame < min(report.CountedFrames, cut.Frame+SeamFrames); frame++ {
+			owner, position := cut.From, "before"
+			if frame >= cut.Frame {
+				owner, position = cut.To, "after"
+			}
+			tiles = append(tiles, Tile{SceneID: owner, Position: position, Frame: frame, AtSeconds: frameTime(frame, opts.FPS)})
+		}
+		points := make([]float64, len(tiles))
+		for j, tile := range tiles {
+			points[j] = tile.AtSeconds
+		}
+		image := filepath.Join(opts.OutDir, fmt.Sprintf("seam-%02d.png", i+1))
+		if err := p.ContactSheet(opts.Video, points, SeamFrames, opts.ThumbWidth, image); err != nil {
+			return err
+		}
+		report.Seams = append(report.Seams, Sheet{Image: image, Columns: SeamFrames, Tiles: tiles})
 	}
 	return nil
 }

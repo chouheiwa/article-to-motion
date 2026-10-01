@@ -174,6 +174,8 @@ am --unsafe run
 # 抽帧供视觉验收，--at 支持秒数、百分比与 end
 am scene frames scenes/scene-001 --at 0,50%,end
 am scene frames scenes/scene-001 --at 0 --check-blank   # 空白封面直接判失败
+am scene frames scenes/scene-001 --strip 1.2:1.6        # 区间内每一帧拼成条带，看动作与转场
+am scene frames scenes/scene-001 --at 50% --crop 88,1180,904,160   # 原始分辨率看局部小字
 
 # 静态扫描合成源码的确定性问题（渲染后的产物校验会自动跑同一套规则）
 am scene lint scenes/scene-001
@@ -206,9 +208,12 @@ am validate video final.mp4 --audio --expect-frames 8340 --check-frame-zero \
   --report-json production/final-check.json
 
 # 字幕时间轴与配音逐条比对：用能量包络独立判定每一刻有没有声音，拦下整体偏移与漏字幕
+# 每个可读元素的停留时间够不够读、是否早于口播出现、顺序是否与口播一致
+am validate reads
+
 am audio check --audio production/audio/voice.wav --srt production/audio/voice.srt
 
-# 整片复查：音画时长、总帧数与镜头帧数之和、镜头交界帧，并按镜头生成联系表
+# 整片复查：音画时长、总帧数与镜头帧数之和、镜头交界帧，按镜头生成联系表，每个交界出一张逐帧条带
 am review final.mp4 --scenes scenes/ --out production/review
 
 am archive --dry-run

@@ -1,6 +1,7 @@
 package mediaprobe
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -62,5 +63,32 @@ func TestInputSeekIsFrameAccurate(t *testing.T) {
 		if stats.Mean < want-2 || stats.Mean > want+2 {
 			t.Errorf("第 %d 帧亮度 %.1f，期望约 %.0f", frame, stats.Mean, want)
 		}
+	}
+}
+
+func TestRegionCropsBeforeScaling(t *testing.T) {
+	tc := toolchain(t)
+	path := sample(t, tc, "testsrc=size=320x240:rate=30:duration=1")
+	dir := t.TempDir()
+	region := &Region{X: 100, Y: 50, W: 120, H: 80}
+	still := filepath.Join(dir, "crop.png")
+	if err := tc.ExtractFrameRegion(path, 0.5, region, still); err != nil {
+		t.Fatal(err)
+	}
+	if media, err := tc.Probe(still); err != nil || media.Video.Resolution() != "120x80" {
+		t.Fatalf("裁剪后应为 120x80：%v %v", media.Video, err)
+	}
+	sheet := filepath.Join(dir, "sheet.png")
+	if err := tc.ContactSheetRegion(path, []float64{0, 0.5}, region, 2, 60, sheet); err != nil {
+		t.Fatal(err)
+	}
+	// 每格 60x40（120x80 等比缩放），2 列 1 行加分隔。
+	want := fmt.Sprintf("%dx%d", 2*60+3*contactSheetPadding, 40+2*contactSheetPadding)
+	if media, err := tc.Probe(sheet); err != nil || media.Video.Resolution() != want {
+		t.Fatalf("裁剪联系表尺寸应为 %s：%v %v", want, media.Video, err)
+	}
+	report, err := tc.ExtractFramesRegion(path, []float64{0.2}, region, dir)
+	if err != nil || len(report.Frames) != 1 {
+		t.Fatalf("批量裁剪抽帧失败：%v", err)
 	}
 }

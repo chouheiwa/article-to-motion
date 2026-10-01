@@ -149,6 +149,8 @@ A successful render is not a correct picture: text can be unreadable against the
 # Extract frames for visual review; --at takes seconds, percentages, and end
 am scene frames scenes/scene-001 --at 0,50%,end
 am scene frames scenes/scene-001 --at 0 --check-blank   # a blank cover frame fails
+am scene frames scenes/scene-001 --strip 1.2:1.6        # every frame of a stretch in one strip, for motion and transitions
+am scene frames scenes/scene-001 --at 50% --crop 88,1180,904,160   # a region at full resolution, for small text
 
 # Statically scan composition sources for nondeterminism (the post-render check runs the same rules)
 am scene lint scenes/scene-001
@@ -181,12 +183,16 @@ am validate video production/silent-master.mp4 --silent --decode
 am validate video final.mp4 --audio --expect-frames 8340 --check-frame-zero \
   --report-json production/final-check.json
 
+# Does every readable element stay on screen long enough to read, appear no earlier than its
+# narration, and follow the narration order?
+am validate reads
+
 # Compare the subtitle timeline with the narration: an energy envelope independently decides
 # when there is sound, catching global offsets and uncovered speech
 am audio check --audio production/audio/voice.wav --srt production/audio/voice.srt
 
 # Whole-film review: audio/video stream lengths, total frames vs. the scene sum, frames at
-# every cut, plus per-scene contact sheets
+# every cut, per-scene contact sheets, and a frame-by-frame strip at every cut
 am review final.mp4 --scenes scenes/ --out production/review
 
 am archive --dry-run

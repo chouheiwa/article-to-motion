@@ -65,6 +65,11 @@ func TestHealthyFilmPasses(t *testing.T) {
 	if tiles[3].Frame != 30 || tiles[4].Frame != 60 || tiles[5].Frame != 89 || tiles[5].Position != "end" {
 		t.Fatalf("s2 的取帧不符：%+v", tiles[3:6])
 	}
+	// 两个交界各一张条带：切点前 6 帧一行、切点后 6 帧一行。
+	if len(report.Seams) != 2 || len(report.Seams[0].Tiles) != 12 || report.Seams[0].Tiles[5].Frame != 29 ||
+		report.Seams[0].Tiles[6].Frame != 30 || report.Seams[0].Tiles[6].SceneID != "s2" || report.Seams[0].Tiles[5].Position != "before" {
+		t.Fatalf("交界条带不符：%+v", report.Seams)
+	}
 }
 
 func TestMachineCheckableProblems(t *testing.T) {

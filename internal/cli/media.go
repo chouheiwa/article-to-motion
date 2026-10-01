@@ -85,9 +85,59 @@ func parseCanvas(value string) (int, int, error) {
 	return w, h, nil
 }
 
+// maxStripFrames 是一张逐帧条带的帧数上限：30fps 下 3 秒。条带是用来看一个
+// 动作或一次转场的，更长的区间应拆成几段，否则缩略图小到看不出差别。
+const maxStripFrames = 90
+
+// parseRegion 解析 --crop 的 x,y,w,h，并要求区域落在画面内。
+func parseRegion(value string, canvas scene.Canvas) (*mediaprobe.Region, error) {
+	parts := strings.Split(value, ",")
+	if len(parts) != 4 {
+		return nil, fmt.Errorf("--crop 必须写成 x,y,宽,高（像素），实际收到 %q", value)
+	}
+	numbers := make([]int, 4)
+	for i, part := range parts {
+		n, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || n < 0 {
+			return nil, fmt.Errorf("--crop 的每一项都必须是非负整数，实际收到 %q", value)
+		}
+		numbers[i] = n
+	}
+	r := &mediaprobe.Region{X: numbers[0], Y: numbers[1], W: numbers[2], H: numbers[3]}
+	if r.W < 2 || r.H < 2 || r.X+r.W > canvas.WidthPx || r.Y+r.H > canvas.HeightPx {
+		return nil, fmt.Errorf("--crop %s 超出 %dx%d 画面或宽高小于 2", value, canvas.WidthPx, canvas.HeightPx)
+	}
+	return r, nil
+}
+
+// parseStrip 把 --strip a:b 换算成区间内的全部帧时间点。
+func parseStrip(spec string, duration float64, fps int) ([]float64, error) {
+	from, to, ok := strings.Cut(spec, ":")
+	if !ok {
+		return nil, fmt.Errorf("--strip 必须写成 开始:结束（秒），实际收到 %q", spec)
+	}
+	bounds, err := parseTimePoints(from+","+to, duration, fps)
+	if err != nil {
+		return nil, fmt.Errorf("--strip：%w", err)
+	}
+	first, last := int(math.Round(bounds[0]*float64(fps))), int(math.Round(bounds[1]*float64(fps)))
+	if last < first {
+		return nil, fmt.Errorf("--strip 的结束早于开始：%q", spec)
+	}
+	if count := last - first + 1; count > maxStripFrames {
+		return nil, fmt.Errorf("--strip 覆盖 %d 帧，超过上限 %d 帧；请拆成几段", count, maxStripFrames)
+	}
+	points := make([]float64, 0, last-first+1)
+	for frame := first; frame <= last; frame++ {
+		points = append(points, float64(frame)/float64(fps))
+	}
+	return points, nil
+}
+
 func newSceneFramesCommand(stdout io.Writer) *cobra.Command {
-	var at, outDir, reportPath string
+	var at, outDir, reportPath, strip, crop string
 	var checkBlank bool
+	var columns, thumbWidth int
 
 	cmd := &cobra.Command{
 		Use: "frames DIRECTORY", Args: exactArgs(1, "DIRECTORY"), Short: "从镜头产物抽帧供视觉检查",
@@ -110,6 +160,13 @@ mp4」变成「可以逐张打开看的 PNG」，并把机器能判的情况标�
 完全均匀的画面：深色背景配浅色标题是常见设计，误判它比漏判一个真空白帧更糟。
 偏暗但有内容的帧只进报告的 hints，不影响退出码。
 
+--strip 开始:结束 把区间内的每一帧拼成一张条带图（strip-<开始>-<结束>.png），
+用来看动作与转场：有没有预备和跟随、是否匀速、几个元素是否同一帧齐动、
+入场是否一帧蹦出。单张最多 90 帧，与 --at 互斥。
+
+--crop x,y,宽,高 只保留画面上这块区域的原始像素，用来在全分辨率下看小字
+是否清楚、线条是否对齐；对 --at 的 PNG 与 --strip 的条带都生效。
+
 产物默认写到 <DIRECTORY>/visual-qc/，与 PROMPT 第七阶段的 production/visual-qc/
 是同一用途。逐帧统计量写在 --report-json 里，判断结果请读它。`,
 		Example: `  # 默认在首、四分位和末帧各抽一张
@@ -117,6 +174,12 @@ mp4」变成「可以逐张打开看的 PNG」，并把机器能判的情况标�
 
   # 只看第 0 帧封面，并拦下空白帧
   am scene frames scenes/scene-001 --at 0 --check-blank
+
+  # 逐帧看 1.2 到 1.6 秒的入场动作
+  am scene frames scenes/scene-001 --strip 1.2:1.6
+
+  # 全分辨率看底部说明文字
+  am scene frames scenes/scene-001 --at 50% --crop 88,1180,904,160
 
   # 检查转场区间，写到项目统一的视觉验收目录
   am scene frames scenes/scene-001 --at 0,0.5,1.2,end \
@@ -141,15 +204,37 @@ mp4」变成「可以逐张打开看的 PNG」，并把机器能判的情况标�
 			if err != nil {
 				return err
 			}
-			points, err := parseTimePoints(at, media.DurationSeconds, canvas.FPS)
-			if err != nil {
-				return err
+			var region *mediaprobe.Region
+			if crop != "" {
+				if region, err = parseRegion(crop, canvas); err != nil {
+					return err
+				}
 			}
 			destination := outDir
 			if destination == "" {
 				destination = filepath.Join(s.Directory, "visual-qc")
 			}
-			report, err := toolchain.ExtractFrames(s.OutputPath(), points, destination)
+			if strip != "" {
+				if cmd.Flags().Changed("at") || checkBlank {
+					return fmt.Errorf("--strip 与 --at、--check-blank 互斥")
+				}
+				points, err := parseStrip(strip, media.DurationSeconds, canvas.FPS)
+				if err != nil {
+					return err
+				}
+				name := "strip-" + strings.ReplaceAll(strings.ReplaceAll(strip, ":", "-"), ".", "_") + ".png"
+				image := filepath.Join(destination, name)
+				if err := toolchain.ContactSheetRegion(s.OutputPath(), points, region, columns, thumbWidth, image); err != nil {
+					return err
+				}
+				fmt.Fprintf(stdout, "逐帧条带：%s（%d 帧，%d 列，从左到右、从上到下）\n", image, len(points), columns)
+				return nil
+			}
+			points, err := parseTimePoints(at, media.DurationSeconds, canvas.FPS)
+			if err != nil {
+				return err
+			}
+			report, err := toolchain.ExtractFramesRegion(s.OutputPath(), points, region, destination)
 			if err != nil {
 				return err
 			}
@@ -175,6 +260,10 @@ mp4」变成「可以逐张打开看的 PNG」，并把机器能判的情况标�
 	cmd.Flags().StringVar(&outDir, "out", "", "PNG 输出目录，缺省为 <DIRECTORY>/visual-qc")
 	cmd.Flags().BoolVar(&checkBlank, "check-blank", false, "发现空白帧时退出码 1；不传则只抽帧和记录，不改变退出码")
 	cmd.Flags().StringVar(&reportPath, "report-json", "", "把逐帧统计写成 JSON 报告到该路径")
+	cmd.Flags().StringVar(&strip, "strip", "", "开始:结束（秒，可用百分比与 end），把区间内每一帧拼成一张条带图")
+	cmd.Flags().StringVar(&crop, "crop", "", "x,y,宽,高（像素），只保留该区域的原始像素")
+	cmd.Flags().IntVar(&columns, "cols", 6, "条带每行的帧数")
+	cmd.Flags().IntVar(&thumbWidth, "thumb-width", 320, "条带里每帧的宽度（像素）")
 	return cmd
 }
 

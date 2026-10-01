@@ -425,19 +425,52 @@ func (t Toolchain) Decode(path string) error {
 	return nil
 }
 
+// Region 是画面上的一个矩形区域（像素，原始分辨率）。
+type Region struct {
+	X, Y, W, H int
+}
+
+// filter 返回裁剪该区域的 ffmpeg 滤镜；r 为 nil 时返回空串。
+func (r *Region) filter() string {
+	if r == nil {
+		return ""
+	}
+	return fmt.Sprintf("crop=%d:%d:%d:%d", r.W, r.H, r.X, r.Y)
+}
+
+// joinFilters 把非空滤镜用逗号串起来。
+func joinFilters(filters ...string) string {
+	var kept []string
+	for _, f := range filters {
+		if f != "" {
+			kept = append(kept, f)
+		}
+	}
+	return strings.Join(kept, ",")
+}
+
 // ExtractFrame 抽取 atSeconds 处的一帧写成 PNG，自动建立目标目录。
 func (t Toolchain) ExtractFrame(path string, atSeconds float64, dest string) error {
+	return t.ExtractFrameRegion(path, atSeconds, nil, dest)
+}
+
+// ExtractFrameRegion 同 ExtractFrame，region 非 nil 时只保留该区域的原始像素，
+// 用于在全分辨率下看小字、细线这类缩略图上看不清的细节。
+func (t Toolchain) ExtractFrameRegion(path string, atSeconds float64, region *Region, dest string) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
-	// -ss 放在 -i 之前是关键帧快速定位，之后是精确定位。抽帧要的是「第 N 秒
-	// 那一帧」而不是「附近的关键帧」，所以放在 -i 之后。
+	// -ss 放在 -i 前面：转码时 ffmpeg 默认精确定位（accurate_seek），取到的就是
+	// 「第 N 秒那一帧」，与放在 -i 后面逐字节相同，但不必从片头解码过来。
 	ffmpeg, err := t.ffmpegPath()
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(ffmpeg, "-v", "error", "-y", "-i", path,
-		"-ss", formatSeconds(atSeconds), "-frames:v", "1", "-f", "image2", "-c:v", "png", dest)
+	argv := []string{"-v", "error", "-y", "-ss", formatSeconds(atSeconds), "-i", path, "-frames:v", "1"}
+	if filter := region.filter(); filter != "" {
+		argv = append(argv, "-vf", filter)
+	}
+	cmd := exec.Command(ffmpeg, append(argv, "-f", "image2", "-c:v", "png", dest)...)
 	cmd.Env = t.env
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -665,10 +698,15 @@ func (r FrameReport) WriteJSON(path string) error {
 // 把「渲染完的 mp4」变成「可以逐张看的 PNG」，顺带把纯色帧这种机器能判的
 // 情况标出来，省得靠人眼去发现一张全黑的图。
 func (t Toolchain) ExtractFrames(path string, atSeconds []float64, destDir string) (FrameReport, error) {
+	return t.ExtractFramesRegion(path, atSeconds, nil, destDir)
+}
+
+// ExtractFramesRegion 同 ExtractFrames，PNG 只保留 region 区域；空白帧判定仍按整帧。
+func (t Toolchain) ExtractFramesRegion(path string, atSeconds []float64, region *Region, destDir string) (FrameReport, error) {
 	report := FrameReport{SchemaVersion: ReportSchemaVersion, Path: path}
 	for _, at := range atSeconds {
 		image := filepath.Join(destDir, fmt.Sprintf("frame-%s.png", strings.ReplaceAll(formatSecondsShort(at), ".", "_")))
-		if err := t.ExtractFrame(path, at, image); err != nil {
+		if err := t.ExtractFrameRegion(path, at, region, image); err != nil {
 			return FrameReport{}, err
 		}
 		stats, err := t.FrameStats(path, at)

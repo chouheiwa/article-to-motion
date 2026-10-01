@@ -20,6 +20,12 @@ const (
 // 不在图上叠时间戳文字：drawtext 依赖 ffmpeg 编译时带 freetype，发行版之间
 // 不一致，缺了就整条命令失败。格子与时间点的对应关系由调用方写进报告。
 func (t Toolchain) ContactSheet(path string, atSeconds []float64, columns, thumbWidth int, dest string) error {
+	return t.ContactSheetRegion(path, atSeconds, nil, columns, thumbWidth, dest)
+}
+
+// ContactSheetRegion 同 ContactSheet，region 非 nil 时每格先裁出该区域再缩放，
+// 用于逐帧看同一处细节（文字、接触点、转场边缘）。
+func (t Toolchain) ContactSheetRegion(path string, atSeconds []float64, region *Region, columns, thumbWidth int, dest string) error {
 	if len(atSeconds) == 0 {
 		return fmt.Errorf("联系表至少需要一个时间点")
 	}
@@ -45,7 +51,7 @@ func (t Toolchain) ContactSheet(path string, atSeconds []float64, columns, thumb
 		// 与放在后面逐字节相同，但不必每格都从片头解码，长片的联系表快一个量级。
 		cmd := exec.Command(ffmpeg, "-v", "error", "-y", "-ss", formatSeconds(at), "-i", path,
 			"-frames:v", "1",
-			"-vf", fmt.Sprintf("scale=%d:-2", thumbWidth), "-f", "image2", "-c:v", "png", thumb)
+			"-vf", joinFilters(region.filter(), fmt.Sprintf("scale=%d:-2", thumbWidth)), "-f", "image2", "-c:v", "png", thumb)
 		cmd.Env = t.env
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("联系表抽帧失败：%s @ %.3f 秒（%s）", path, at, firstLine(string(output)))

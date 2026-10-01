@@ -303,18 +303,20 @@ am audio check --audio production/audio/voice.wav --srt production/audio/voice.s
 - `production/phrase-timeline.json`
 - `production/visible-event-inventory.json`
 
-`phrase-timeline.json` 中每个受保护短语至少记录：
+两个文件的字段名固定，`am validate reads` 按这些名字读取；帧号一律是全片全局帧。
 
-- `phrase_id`、字幕编号、原文、语义顺序。
-- 毫秒级开始与结束时间、全局开始帧和结束帧。
-- 对齐来源、置信度和人工复核状态。
-- 对应的可见事件 ID。
+`phrase-timeline.json`：顶层 `{"schema": 1, "fps": 30, "phrases": [...]}`，每个受保护短语记录：
 
-每个 `visible_event` 至少记录：
+- `phrase_id`、`subtitle_index`（字幕编号）、`source_text`（原文）、`semantic_order`（语义顺序）。
+- `start_ms`、`end_ms`，以及 `start_frame`、`end_frame_exclusive`。
+- `alignment_source`（对齐来源）、`confidence`（置信度）、`reviewed`（人工复核状态）。
+- `visible_event_ids`（对应的可见事件 ID）。
 
-- 所属镜头、DOM selector 或稳定元素 ID、显示文本和语义角色。
-- 绑定的 `phrase_id`。
-- `enter_frame`、`readable_start_frame`、`readable_end_frame_exclusive` 和退出完成帧。
+`visible-event-inventory.json`：顶层 `{"schema": 1, "fps": 30, "events": [...]}`，每个可见事件记录：
+
+- `event_id`、`scene_id`（所属镜头）、`selector`（DOM selector 或稳定元素 ID）、`text`（显示文本）、`role`（语义角色；纯装饰元素写 `decorative`）。
+- `phrase_id`（绑定的短语）。
+- `enter_frame`、`readable_start_frame`、`readable_end_frame_exclusive`、`exit_end_frame`（退出完成帧）。
 
 必须验证：
 
@@ -324,6 +326,7 @@ am audio check --audio production/audio/voice.wav --srt production/audio/voice.s
 - “条件—结论”“主语—谓语”“看谁—传什么—最终结论”等不可颠倒结构必须分别绑定。
 - 复合标题如果包含多个先后出现的受保护短语，必须拆成独立可控元素，或推迟到整句说完后作为总结出现。
 - 每个受保护短语至少生成“开始前一帧、开始帧、稳定可读帧”三联证据。
+- 每个非装饰元素的可读区间必须够观众读完：不短于 5/6 秒，也不短于「字数 ÷ 每秒 9 字」（一个汉字、一个英文词或一个数各算一个字）。这是字幕的下限，画面元素还要先被找到，信息越密集留得越长。一次只给观众一个信息点：前一个还没读完，不要让下一个开始。
 
 ## 第五阶段：按语义拆分镜头
 
@@ -429,9 +432,19 @@ scenes/
 
 抽帧用 `am scene frames <镜头目录> --out production/visual-qc/<镜头编号> --report-json production/visual-qc/<镜头编号>.json`，不要自己拼 FFmpeg。`--at` 接受秒数、百分比和 `end`，可混用；`end` 取时长减一帧，直接用时长会超出末帧，FFmpeg 会返回成功却什么都不输出。
 
+静帧看不出动作。入场、阶段切换和转场用 `--strip 开始:结束` 把该段每一帧拼成一张条带图，检查有没有一帧蹦出或闪烁、是否全程匀速、几个元素是否同一帧齐动、上一个信息点读完前下一个是否已经抢视线。小字号文字用 `--crop x,y,宽,高` 在原始分辨率下看清楚，不要凭缩略图判断可读。
+
 第 0 帧要做封面时加 `--at 0 --check-blank`，空白帧直接判失败。判定阈值刻意保守，只拦几乎完全均匀的画面：深色背景配浅色标题是常见设计，偏暗但有内容的帧只进报告的 `hints`，不影响退出码。
 
 命令只负责把 MP4 变成可以逐张打开看的 PNG，并标出纯色帧这种机器能判的情况。画面对不对要你自己看图判断——上面列的几何、对齐和语义检查没有任何机器替代。
+
+镜头代码定稿、`visible-event-inventory.json` 按实际 composition 填好后，用一条命令核对阅读时间、短语绑定和画面顺序：
+
+```bash
+am validate reads --report-json production/visual-qc/reads-check.json
+```
+
+`problems` 必须为空：不够读的元素回镜头工程延长可读区间或拆开信息点，不得只改清单里的数字。`hints` 里「同时开始可读」的元素要确认它们是同一个信息点（如一组卡片），否则错开出场。
 
 把截图、检查结果和修复记录保存在 `production/visual-qc/`。视觉未通过时，只重渲染相关镜头，不重做已冻结的配音和其他镜头。
 
@@ -533,9 +546,9 @@ am validate video <候选成片> --audio --expect-frames <冻结时间轴总帧�
 am review <候选成片> --scenes scenes/ --out production/review
 ```
 
-它比对音轨与视频流各自的时长，精确统计总帧数并与各镜头帧数之和比对（漏拼、重拼、掉帧都会被拦下），检查每个镜头交界两侧的帧，并把每个镜头的首帧、中间帧、末帧拼成联系表。判断结果读 `production/review/review.json`：`ok` 为 `false` 时 `problems` 里是全部不符项；交界处的纯色帧只进 `hints`，因为切黑、切白可能是有意的转场，要你看图确认。
+它比对音轨与视频流各自的时长，精确统计总帧数并与各镜头帧数之和比对（漏拼、重拼、掉帧都会被拦下），检查每个镜头交界两侧的帧，并把每个镜头的首帧、中间帧、末帧拼成联系表，每个交界再出一张前后各 6 帧的条带 `seam-NN.png`。判断结果读 `production/review/review.json`：`ok` 为 `false` 时 `problems` 里是全部不符项；交界处的纯色帧只进 `hints`，因为切黑、切白可能是有意的转场，要你看图确认。
 
-机器检查通过后逐页打开 `production/review/sheet-NN.png` 做视觉复查：相邻镜头的风格、配色与画面密度是否一致，交界是否跳变突兀，结尾是否停在合适的画面。发现问题只重渲染相关镜头，重新拼接、混音后再复查一次。复查报告与联系表纳入审批绑定的检查文件。
+机器检查通过后逐页打开 `production/review/sheet-NN.png` 做视觉复查：相邻镜头的风格、配色与画面密度是否一致，结尾是否停在合适的画面；再逐张看 `seam-NN.png`，确认每个交界的转场顺畅，没有一帧闪烁、跳变或停在入场中间态。发现问题只重渲染相关镜头，重新拼接、混音后再复查一次。复查报告与联系表纳入审批绑定的检查文件。
 
 命令覆盖不到、仍需另行确认的：
 

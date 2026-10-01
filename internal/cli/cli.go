@@ -876,6 +876,7 @@ SVG 转 PNG 这一步不能用 ImageMagick 代替：多数 ImageMagick 构建自
 	validateCmd.AddCommand(newValidateVideoCommand(stdout, &projectRoot))
 	validateCmd.AddCommand(newValidateCastCommand(stdout))
 	validateCmd.AddCommand(newValidateSongCommand(stdout))
+	validateCmd.AddCommand(newValidateReadsCommand(stdout))
 	root.AddCommand(validateCmd)
 	root.AddCommand(newConcatCommand(stdout, &projectRoot))
 	root.AddCommand(newReviewCommand(stdout, &projectRoot))

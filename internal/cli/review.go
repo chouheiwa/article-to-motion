@@ -35,6 +35,8 @@ func newReviewCommand(stdout io.Writer, projectRoot *string) *cobra.Command {
              不一致说明漏拼、重拼或拼接掉帧
   镜头交界   给了 --scenes 时，取每个交界两侧各一帧做纯色判定。切黑、切白是
              合法转场，机器分不清有意还是事故，所以只进 hints，不改变退出码
+  交界条带   给了 --scenes 时，每个交界出一张 seam-NN.png：上一行是切点前 6 帧，
+             下一行是切点后 6 帧，用来看转场是否顺、有没有一帧闪烁或跳变
 
 联系表按镜头排版：每行一个镜头，依次是首帧、中间帧、末帧；没给 --scenes 时
 按 --every 秒的间隔取帧，每行 4 格。每张最多 --per-sheet 格，超出分页。
@@ -97,6 +99,9 @@ func newReviewCommand(stdout io.Writer, projectRoot *string) *cobra.Command {
 			}
 			for _, sheet := range report.Sheets {
 				fmt.Fprintf(stdout, "联系表：%s（%d 格）\n", sheet.Image, len(sheet.Tiles))
+			}
+			if len(report.Seams) > 0 {
+				fmt.Fprintf(stdout, "交界条带：%d 张（%s 起）\n", len(report.Seams), report.Seams[0].Image)
 			}
 			for _, hint := range report.Hints {
 				fmt.Fprintf(stdout, "提示：%s\n", hint)

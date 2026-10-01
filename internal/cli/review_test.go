@@ -107,3 +107,47 @@ func TestSceneLintCommand(t *testing.T) {
 		t.Fatalf("豁免后应通过并列出豁免项：%d %s %s", code, out.String(), errOut.String())
 	}
 }
+
+func TestSceneFramesStripAndCrop(t *testing.T) {
+	requireFFmpeg(t)
+	dir := makeSceneDir(t, t.TempDir(), "scene-001", 2, "testsrc=size=1080x1440:rate=30:duration=2")
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{"scene", "frames", dir, "--strip", "0.5:0.8", "--cols", "5", "--thumb-width", "64"}, &out, &errOut); code != 0 {
+		t.Fatalf("条带应成功：%d %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "（10 帧，5 列") {
+		t.Errorf("0.5 到 0.8 秒应为第 15–24 帧共 10 帧：%s", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "visual-qc", "strip-0_5-0_8.png")); err != nil {
+		t.Errorf("条带文件没有生成：%v", err)
+	}
+	out.Reset()
+	if code := Execute([]string{"scene", "frames", dir, "--at", "0", "--crop", "0,0,200,100"}, &out, &errOut); code != 0 {
+		t.Fatalf("裁剪抽帧应成功：%d %s", code, errOut.String())
+	}
+	for _, args := range [][]string{
+		{"--strip", "0:2", "--at", "0"}, // 互斥
+		{"--strip", "0:end"},            // 2 秒片子的 0:end 是 60 帧，在上限内，合法
+		{"--crop", "1000,0,200,100"},    // 超出画面
+		{"--crop", "1,2,3"},             // 格式错误
+		{"--strip", "1.5:0.5"},          // 倒序
+	} {
+		errOut.Reset()
+		code := Execute(append([]string{"scene", "frames", dir}, args...), &out, &errOut)
+		if args[1] == "0:end" {
+			if code != 0 {
+				t.Errorf("0:end 共 60 帧应成功：%s", errOut.String())
+			}
+			continue
+		}
+		if code != 1 {
+			t.Errorf("%v 应失败", args)
+		}
+	}
+}
+
+func TestParseStripCapsLength(t *testing.T) {
+	if _, err := parseStrip("0:5", 10, 30); err == nil || !strings.Contains(err.Error(), "上限 90") {
+		t.Fatalf("超过 90 帧应报错：%v", err)
+	}
+}
