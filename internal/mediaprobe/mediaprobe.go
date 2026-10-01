@@ -40,6 +40,9 @@ type VideoStream struct {
 	ColorSpace     string `json:"color_space,omitempty"`
 	ColorPrimaries string `json:"color_primaries,omitempty"`
 	ColorTransfer  string `json:"color_transfer,omitempty"`
+	// DurationSeconds 是该流自己声明的时长，0 表示没声明。
+	// 与容器时长分开记：成片的音画是否等长只能按流比。
+	DurationSeconds float64 `json:"duration_seconds,omitempty"`
 }
 
 // FPS 返回帧率。ffprobe 用分数表示帧率，29.97 写成 30000/1001。
@@ -60,6 +63,8 @@ type AudioStream struct {
 	Codec      string `json:"codec"`
 	SampleRate int    `json:"sample_rate"`
 	Channels   int    `json:"channels"`
+	// DurationSeconds 是该流自己声明的时长，0 表示没声明。
+	DurationSeconds float64 `json:"duration_seconds,omitempty"`
 }
 
 // Media 是一个媒体文件的实测规格。没有音轨时 Audio 为 nil。
@@ -257,6 +262,7 @@ type rawProbe struct {
 		ColorSpace     string `json:"color_space"`
 		ColorPrimaries string `json:"color_primaries"`
 		ColorTransfer  string `json:"color_transfer"`
+		Duration       string `json:"duration"`
 	} `json:"streams"`
 	Format struct {
 		Duration string `json:"duration"`
@@ -290,25 +296,27 @@ func parse(body []byte, path string) (Media, error) {
 				frames = parseInt(stream.NBReadFrames)
 			}
 			media.Video = &VideoStream{
-				Codec:          stream.CodecName,
-				WidthPx:        stream.Width,
-				HeightPx:       stream.Height,
-				PixelFormat:    stream.PixFmt,
-				FPSNum:         num,
-				FPSDen:         den,
-				NBFrames:       frames,
-				ColorSpace:     stream.ColorSpace,
-				ColorPrimaries: stream.ColorPrimaries,
-				ColorTransfer:  stream.ColorTransfer,
+				Codec:           stream.CodecName,
+				WidthPx:         stream.Width,
+				HeightPx:        stream.Height,
+				PixelFormat:     stream.PixFmt,
+				FPSNum:          num,
+				FPSDen:          den,
+				NBFrames:        frames,
+				ColorSpace:      stream.ColorSpace,
+				ColorPrimaries:  stream.ColorPrimaries,
+				ColorTransfer:   stream.ColorTransfer,
+				DurationSeconds: parseFloat(stream.Duration),
 			}
 		case "audio":
 			if media.Audio != nil {
 				continue
 			}
 			media.Audio = &AudioStream{
-				Codec:      stream.CodecName,
-				SampleRate: parseInt(stream.SampleRate),
-				Channels:   stream.Channels,
+				Codec:           stream.CodecName,
+				SampleRate:      parseInt(stream.SampleRate),
+				Channels:        stream.Channels,
+				DurationSeconds: parseFloat(stream.Duration),
 			}
 		}
 	}
@@ -493,8 +501,9 @@ func (t Toolchain) FrameStats(path string, atSeconds float64) (FrameStats, error
 	if err != nil {
 		return FrameStats{}, err
 	}
-	cmd := exec.Command(ffmpeg, "-v", "error", "-i", path,
-		"-ss", formatSeconds(atSeconds), "-frames:v", "1",
+	// 输入端定位，理由同 ContactSheet：整片复查要对每个镜头交界各取两帧。
+	cmd := exec.Command(ffmpeg, "-v", "error", "-ss", formatSeconds(atSeconds), "-i", path,
+		"-frames:v", "1",
 		"-vf", fmt.Sprintf("scale=%d:%d,format=gray", statsSampleSize, statsSampleSize),
 		"-f", "rawvideo", "-")
 	cmd.Env = t.env

@@ -42,9 +42,9 @@ heiwa: 你先别急，我们从背景讲起。
 
 ## 三、逐段调用 mmx / bl，保存段内时间戳
 
-TTS 服务提供方仍由 `article-to-motion.conf`（或环境变量 `TTS_PROVIDER`）决定，`mmx` / `bl` 两条路径的凭据、鉴权方式、密钥保管规则与 `PROMPT-PRODUCTION.md` 第三阶段完全一致，此处不重复；音色、语速试听确认，以及易误读词发音控制（`mmx` 的 `--pronunciation`、百炼 SSML `<phoneme>`）的要求也一致，只是作用范围从"整篇口播"缩小到"每一段"。
+TTS 服务提供方仍由 `article-to-motion.conf`（或环境变量 `TTS_PROVIDER`）决定，各路径的凭据、鉴权方式、密钥保管规则与 `PROMPT-PRODUCTION.md` 第三阶段完全一致，此处不重复；音色、语速试听确认，以及易误读词发音控制（`mmx` 的 `--pronunciation`、百炼 SSML `<phoneme>`，不支持自定义发音的路径改写送进 TTS 的文本）的要求也一致，只是作用范围从"整篇口播"缩小到"每一段"。
 
-- 每个说话人使用其 `cast/<id>/character.yaml` 里 `voice.minimax.voiceId` 或 `voice.bailian.voiceId`（取决于当前 `TTS_PROVIDER`）对应的音色；同一说话人从头到尾使用同一个 voiceId，不得中途切换。
+- 每个说话人使用其 `cast/<id>/character.yaml` 里 `voice.<TTS_PROVIDER>.voiceId`（例如 `voice.minimax.voiceId`、`voice.edge.voiceId`，取决于当前 `TTS_PROVIDER`）对应的音色；同一说话人从头到尾使用同一个 voiceId，不得中途切换。
 - 逐段合成时依旧按第三阶段的方式取真实时间戳：MiniMax 用 `--subtitles` 直接产出，百炼走合成 + `bl speech recognize` 两步识别。这里拿到的时间戳是相对本段音频起点的段内时间，不是全局时间轴——全局时间轴由 `am dialogue assemble` 统一计算，不要在这一步手工换算或累加偏移。
 - 每段落盘为独立音频文件，建议命名 `production/audio/segments/<index>-<speaker>.wav`，`index` 从 0 开始，与后面 `plan.json` 里 `segments[].index` 一一对应。
 - 断句检查、发音控制覆盖范围的要求与单口播一致，只是逐段各自核对：产品名/模型名是否被拆开、数字和英文缩写是否读对、长句是否留出呼吸、段尾是否留出画面展示时间。

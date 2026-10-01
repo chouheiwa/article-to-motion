@@ -95,8 +95,11 @@ am init my-video --canvas vertical-9x16 --style pixel-arcade-v1
 ORCHESTRATOR=codex
 RENDERER=claude
 TTS_PROVIDER=minimax
+ALIGN_PROVIDER=auto
 SCENE_JOBS=3
 ```
+
+`TTS_PROVIDER` 可选 `minimax`、`bailian`、`edge`（免鉴权，适合预览）、`elevenlabs`、`tencent`、`mlx`（本机离线，仅 Apple Silicon）；凭据一律走各工具自己的登录命令。`ALIGN_PROVIDER` 选择已知文本强制对齐工具，缺省 `auto`：Apple Silicon 上用 mlx-audio 的 Qwen3-ForcedAligner，其余平台用 FunASR。没有自带字级时间戳的 TTS 路径，字幕时间轴由它生成。
 
 优先级为环境变量、项目 `.env`、配置文件、内置默认。项目 `.env` 不允许保存 API Key、Token、Secret 或 Password。
 
@@ -172,12 +175,19 @@ am --unsafe run
 am scene frames scenes/scene-001 --at 0,50%,end
 am scene frames scenes/scene-001 --at 0 --check-blank   # 空白封面直接判失败
 
+# 静态扫描合成源码的确定性问题（渲染后的产物校验会自动跑同一套规则）
+am scene lint scenes/scene-001
+
 # 按镜头顺序拼成静音母版，规格一致时全程 -c copy
 am concat scenes/ --out production/silent-master.mp4 --dry-run
 am concat scenes/ --out production/silent-master.mp4
 ```
 
 `am concat` 不提供重定时能力。分辨率或帧率与母版不符时直接失败并要求回镜头工程重渲染，而不是缩放或改帧率——前者损失画质，后者会动到时间轴。
+
+镜头产物校验除了画幅、帧率、时长与无音轨，还会扫描渲染实际加载的 HTML/JS/CSS：读时钟、`Math.random()`、`requestAnimationFrame`、`setInterval`、无限 `repeat`、渲染时联网、在线字体与未固定版本的 CDN 库都会让同一帧在两次渲染间不同，命中即判失败且不重试。渲染路径确实不经过的交互代码可在同一行注释写 `am-allow-nondeterministic: 理由` 豁免，豁免项照样写进报告。
+
+`am scene run-all` 按镜头时长从长到短派发，避免排在末尾的长镜头独自拖长整批耗时；并发渲染时按 `(CPU 核数 - 2) / 并发数` 给每个镜头分配 HyperFrames 的 `--workers`，免得几个渲染各自按独占整机估算、合起来超订 CPU 和内存。
 
 ## 校验与归档
 
@@ -194,6 +204,12 @@ am validate cast --project-root .
 am validate video production/silent-master.mp4 --silent --decode
 am validate video final.mp4 --audio --expect-frames 8340 --check-frame-zero \
   --report-json production/final-check.json
+
+# 字幕时间轴与配音逐条比对：用能量包络独立判定每一刻有没有声音，拦下整体偏移与漏字幕
+am audio check --audio production/audio/voice.wav --srt production/audio/voice.srt
+
+# 整片复查：音画时长、总帧数与镜头帧数之和、镜头交界帧，并按镜头生成联系表
+am review final.mp4 --scenes scenes/ --out production/review
 
 am archive --dry-run
 am archive

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -367,7 +368,7 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
 输出等于 am 实际会用的值。`,
 	}
 	configCmd.AddCommand(&cobra.Command{
-		Use:   "get ORCHESTRATOR|RENDERER|TTS_PROVIDER",
+		Use:   "get ORCHESTRATOR|RENDERER|TTS_PROVIDER|ALIGN_PROVIDER",
 		Args:  exactArgs(1, "KEY"),
 		Short: "打印单个配置键",
 		Long: `把单个配置键的解析结果打印到 stdout，只有值本身加一个换行，便于直接捕获。
@@ -375,7 +376,10 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
 可用键：
   ORCHESTRATOR   编排工具：codex | claude | qoder | codebuddy | opencode
   RENDERER       渲染工具：同上取值范围
-  TTS_PROVIDER   语音合成：minimax | bailian
+  TTS_PROVIDER   语音合成：` + strings.ReplaceAll(config.TTSProviderIDs(), " ", " | ") + `
+  ALIGN_PROVIDER 已知文本强制对齐：` + strings.ReplaceAll(config.AlignerIDs(), " ", " | ") + `
+                 auto 在 Apple Silicon 上解析为 mlx，其余平台为 funasr；
+                 本命令打印的是解析后的具体工具，不会是 auto
 
 在当前工作目录解析配置，因此要在项目根运行。键名未知或解析出的值非法时退出码 1。`,
 		Example: `  # 捕获解析后的渲染工具
@@ -388,7 +392,7 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
 			if err != nil {
 				return err
 			}
-			values := map[string]string{"ORCHESTRATOR": cfg.Orchestrator, "RENDERER": cfg.Renderer, "TTS_PROVIDER": cfg.TTSProvider}
+			values := map[string]string{"ORCHESTRATOR": cfg.Orchestrator, "RENDERER": cfg.Renderer, "TTS_PROVIDER": cfg.TTSProvider, "ALIGN_PROVIDER": cfg.AlignProvider}
 			value, ok := values[args[0]]
 			if !ok {
 				return fmt.Errorf("未知配置键：%s", args[0])
@@ -606,10 +610,13 @@ AI CLI 调用。这类失败要先改提示词或时长声明再重跑。
 			// 阶段消息和警告，多个 worker 同时 Fprintln 到一个非并发安全的 writer
 			// 是实打实的数据竞争，写 os.Stdout 时则表现为几镜的进度输出互相交错。
 			progress := &syncWriter{writer: stdout}
+			// 已跳过的镜头不占渲染并发，worker 按真正要渲染的镜头数分。
+			workers := schedule.RenderWorkers(runtime.NumCPU(), min(jobs, len(scenes)-len(initial)))
 			report := schedule.RunAll(cmd.Context(), scenes, jobs, retries, func(ctx context.Context, s scene.Scene) error {
 				if outcome, ok := initial[s.ID]; ok {
 					return outcome
 				}
+				s = s.WithRenderWorkers(workers)
 				err := scene.Run(ctx, s, cfg, envutil.IsUnsafe(unsafe), currentEnvironment(), progress, tolerance)
 				// 产物规格不符是确定性的：同样的提示词和渲染器重跑只会得到同样的产物。
 				// 不在这里截断的话，每个规格不符的镜头都要白烧 retries 次 AI CLI 调用。
@@ -642,6 +649,7 @@ AI CLI 调用。这类失败要先改提示词或时长声明再重跑。
 	runAll.Flags().BoolVar(&strictCoverage, "strict-coverage", false, "覆盖校验不通过时直接失败，而不是只打印警告")
 	sceneCmd.AddCommand(runAll)
 	sceneCmd.AddCommand(newSceneFramesCommand(stdout))
+	sceneCmd.AddCommand(newSceneLintCommand(stdout))
 	root.AddCommand(sceneCmd)
 
 	var workdir string
@@ -870,6 +878,8 @@ SVG 转 PNG 这一步不能用 ImageMagick 代替：多数 ImageMagick 构建自
 	validateCmd.AddCommand(newValidateSongCommand(stdout))
 	root.AddCommand(validateCmd)
 	root.AddCommand(newConcatCommand(stdout, &projectRoot))
+	root.AddCommand(newReviewCommand(stdout, &projectRoot))
+	root.AddCommand(newAudioCmd(stdout))
 	root.AddCommand(newSongCmd(stdout))
 	root.AddCommand(newCastCmd(stdout))
 	root.AddCommand(newDialogueCmd(stdout))

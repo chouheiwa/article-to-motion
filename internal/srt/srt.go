@@ -1,7 +1,7 @@
-// Package srt 只做一件事：从字幕文件读出时间跨度。
+// Package srt 读取字幕的时间信息：整体跨度（ReadSpan）与逐条时间码（ReadCues）。
 //
-// 不做完整的 SRT 解析，也不关心文本内容——调用方需要的是「第一条字幕开始到
-// 最后一条字幕结束」这一个数字，用来核对镜头拆分有没有漏掉或重复覆盖时间轴。
+// 跨度用来核对镜头拆分有没有漏掉或重复覆盖时间轴；逐条时间码用来与实际语音
+// 比对。两者都不做样式、位置等 SRT 扩展语法的解析。
 package srt
 
 import (
@@ -97,4 +97,73 @@ func clockSeconds(hours, minutes, seconds, millis string) (float64, error) {
 	total := time.Duration(h)*time.Hour + time.Duration(m)*time.Minute +
 		time.Duration(s)*time.Second + time.Duration(ms)*time.Millisecond
 	return total.Seconds(), nil
+}
+
+// Cue 是一条字幕。Index 是它在文件中的出现顺序（从 1 开始），不取文件里写的
+// 序号：那一行常被手工编辑弄乱，报错时按出现顺序定位才可靠。
+type Cue struct {
+	Index        int     `json:"index"`
+	StartSeconds float64 `json:"start_seconds"`
+	EndSeconds   float64 `json:"end_seconds"`
+	Text         string  `json:"text"`
+}
+
+// ReadCues 按出现顺序读出全部字幕条目。时间码之后、空行之前的非空行是正文。
+func ReadCues(path string) ([]Cue, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("无法读取字幕：%w", err)
+	}
+	defer file.Close()
+
+	var cues []Cue
+	var current *Cue
+	var text []string
+	flush := func() {
+		if current != nil {
+			current.Text = strings.Join(text, "\n")
+			cues = append(cues, *current)
+		}
+		current, text = nil, nil
+	}
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimPrefix(scanner.Text(), "\ufeff")
+		if match := timecodeLine.FindStringSubmatch(line); match != nil {
+			flush()
+			start, err := clockSeconds(match[1], match[2], match[3], match[4])
+			if err != nil {
+				return nil, err
+			}
+			end, err := clockSeconds(match[5], match[6], match[7], match[8])
+			if err != nil {
+				return nil, err
+			}
+			// 零时长条目照收：对齐器常给纯标点条目输出 start == end，判对错是
+			// 调用方的事；结束早于开始则是文件本身坏了。
+			if end < start {
+				return nil, fmt.Errorf("第 %d 条字幕的结束时间早于开始时间：%s", len(cues)+1, strings.TrimSpace(line))
+			}
+			current = &Cue{Index: len(cues) + 1, StartSeconds: start, EndSeconds: end}
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if current == nil {
+			continue
+		}
+		if trimmed == "" {
+			flush()
+			continue
+		}
+		text = append(text, trimmed)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("读取字幕失败：%w", err)
+	}
+	flush()
+	if len(cues) == 0 {
+		return nil, fmt.Errorf("字幕里没有任何时间码：%s", path)
+	}
+	return cues, nil
 }

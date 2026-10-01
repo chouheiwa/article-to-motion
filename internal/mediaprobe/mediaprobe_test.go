@@ -68,11 +68,17 @@ func TestParseReadsRealFfprobeFieldTypes(t *testing.T) {
 	if v.FPS() != 30 {
 		t.Errorf("FPS = %v，期望 30（由 r_frame_rate 的分数解析）", v.FPS())
 	}
+	if v.DurationSeconds != 2.833 {
+		t.Errorf("视频流时长 = %v，期望 2.833（流级 duration 是字符串）", v.DurationSeconds)
+	}
 	if media.Audio == nil {
 		t.Fatal("没有解析出音频流")
 	}
 	if media.Audio.SampleRate != 48000 || media.Audio.Channels != 2 {
 		t.Errorf("音频流解析错误：%+v", media.Audio)
+	}
+	if media.Audio.DurationSeconds != 0 {
+		t.Errorf("音频流没声明时长时应为 0，实际 %v", media.Audio.DurationSeconds)
 	}
 }
 

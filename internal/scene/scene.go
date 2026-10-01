@@ -85,11 +85,20 @@ type Scene struct {
 	// 同一提示词重跑大概率重蹈覆辙，把失败原因和归档日志位置交给渲染器，
 	// 它才有机会换一种做法。
 	RetryNote string `json:"-"`
+	// RenderWorkers 是调度器按并发数分给本镜头的帧捕获 worker 数，不来自
+	// scene.json；0 表示沿用 HyperFrames 的 auto。
+	RenderWorkers int `json:"-"`
 }
 
 // WithRetryNote 返回带上一次失败说明的副本，不修改原镜头。
 func (s Scene) WithRetryNote(note string) Scene {
 	s.RetryNote = note
+	return s
+}
+
+// WithRenderWorkers 返回指定渲染 worker 数的副本，不修改原镜头。
+func (s Scene) WithRenderWorkers(workers int) Scene {
+	s.RenderWorkers = workers
 	return s
 }
 
@@ -555,9 +564,21 @@ func BuildPrompt(s Scene, resolvedSkills map[string]string) (string, error) {
 [[USER_MESSAGE]]开始联网搜索
 [[USER_MESSAGE]]代码已完成，开始渲染
 [[USER_MESSAGE]]视频已渲染完成：%s
-`, canvas.Label(), s.ID, s.DurationSeconds, frames, canvas.FPS, frames, canvas.FPS, frames, s.Output, s.Transcript, TextOpen, s.Text, TextClose, body, style, castSection(s)+songSection(s, resolvedSkills), skillPromptSections(resolvedSkills), selfReviewSection, retrySection(s), s.Output)
+`, canvas.Label(), s.ID, s.DurationSeconds, frames, canvas.FPS, frames, canvas.FPS, frames, s.Output, s.Transcript, TextOpen, s.Text, TextClose, body, style, castSection(s)+songSection(s, resolvedSkills), skillPromptSections(resolvedSkills), determinismSection+workersSection(s)+selfReviewSection, retrySection(s), s.Output)
 	return prompt, nil
 }
+
+// determinismSection 把 internal/determinism 的检查项提前告诉渲染器。
+//
+// 这些禁令上游技能里都有，但渲染器违反了照样能渲染成功；现在渲染后会被
+// 源码扫描拦下并判失败，不重试。提前说清楚「会被机器查」和豁免写法，
+// 比失败后再从日志里猜原因便宜得多。
+const determinismSection = `
+确定性（强制，渲染后由源码扫描检查，命中即判本镜头失败且不重试）：
+- 渲染实际加载的 HTML、JS、CSS 里不得出现：Date.now()、performance.now()、无参 new Date()、Math.random()、requestAnimationFrame、setInterval、repeat: -1，以及渲染时的网络请求（远程 fetch、XMLHttpRequest、WebSocket）。随机效果用固定种子的 PRNG。随镜头拷贝的第三方库放进 vendor/ 目录或保留 .min.js 文件名，它们按库跳过、不做判定。
+- 远程资源只允许 cdn.jsdelivr.net、unpkg.com、esm.sh、cdnjs.cloudflare.com 上带完整版本号（x.y.z）的库；在线字体、远程图片与未固定版本的库都不允许，所需文件放进镜头目录。
+- 仅在渲染路径确实不经过的交互代码（如 viewer 预览播放）上，可在同一行注释写 ` + "`" + `am-allow-nondeterministic: 理由` + "`" + ` 豁免，豁免会写进报告。
+`
 
 // selfReviewSection 要求渲染器在正式渲染前看自己的画面并至少返工一轮。
 //
@@ -579,6 +600,17 @@ const selfReviewSection = `
   6. 与版式示例图相比，构图密度与风格是否一致。
 - 发现问题就改代码，改完重新截图确认。至少完成一轮「截图 → 修改 → 再截图」；确认无问题后才正式 render。
 `
+
+// workersSection 告诉渲染器本镜头可用的帧捕获 worker 数；单镜头渲染时为空。
+//
+// 同时渲染的几个镜头各自用 --workers auto 时，每个都按独占整机估算 Chrome
+// 数量与内存，合起来超订，机器开始换页后整批都变慢，甚至被系统杀掉。
+func workersSection(s Scene) string {
+	if s.RenderWorkers <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("\n渲染并发（强制）：本机同时在渲染其他镜头，正式 render 时加 --workers %d，不要用 auto 或更大的值。\n", s.RenderWorkers)
+}
 
 // retrySection 把上一次失败的原因交给本次渲染；首次渲染时为空。
 func retrySection(s Scene) string {

@@ -72,6 +72,7 @@ func TestLoadRejectsInvalidChoicesAndJobs(t *testing.T) {
 	for name, body := range map[string]string{
 		"missing": "RENDERER=claude\n",
 		"tts":     "ORCHESTRATOR=codex\nRENDERER=claude\nTTS_PROVIDER=bad\n",
+		"align":   "ORCHESTRATOR=codex\nRENDERER=claude\nALIGN_PROVIDER=whisper\n",
 		"jobs":    "ORCHESTRATOR=codex\nRENDERER=claude\nSCENE_JOBS=99\n",
 	} {
 		t.Run(name, func(t *testing.T) {

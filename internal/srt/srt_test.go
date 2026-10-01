@@ -137,3 +137,51 @@ func TestReadSpanIgnoresNonTimecodeLines(t *testing.T) {
 		t.Errorf("跨度 = %v，期望 6——正文里的时间码字样不该参与计算", span.Seconds())
 	}
 }
+
+func TestReadCuesParsesTextAndKeepsFileOrder(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "voice.srt")
+	body := "\ufeff7\n00:00:00,500 --> 00:00:02,000\n第一行\n第二行\n\n3\n00:00:02.3 --> 00:00:04,100\nsecond\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cues, err := ReadCues(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cues) != 2 {
+		t.Fatalf("应解析出 2 条，实际 %d", len(cues))
+	}
+	if cues[0].Index != 1 || cues[0].StartSeconds != 0.5 || cues[0].EndSeconds != 2 || cues[0].Text != "第一行\n第二行" {
+		t.Errorf("第 1 条不符：%+v", cues[0])
+	}
+	if cues[1].Index != 2 || cues[1].StartSeconds != 2.3 || cues[1].Text != "second" {
+		t.Errorf("第 2 条不符（序号按出现顺序，毫秒右补零）：%+v", cues[1])
+	}
+}
+
+func TestReadCuesRejectsBadInput(t *testing.T) {
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"empty.srt":    "no timecodes here\n",
+		"reverse.srt":  "1\n00:00:02,000 --> 00:00:01,000\nx\n",
+		"badclock.srt": "1\n00:61:00,000 --> 00:62:00,000\nx\n",
+	} {
+		path := filepath.Join(dir, name)
+		os.WriteFile(path, []byte(body), 0o644)
+		if _, err := ReadCues(path); err == nil {
+			t.Errorf("%s 应报错", name)
+		}
+	}
+	if _, err := ReadCues(filepath.Join(dir, "missing.srt")); err == nil {
+		t.Error("文件不存在应报错")
+	}
+}
+
+func TestReadCuesKeepsZeroLengthCues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "align.srt")
+	os.WriteFile(path, []byte("1\n00:00:01,000 --> 00:00:01,000\n，\n"), 0o644)
+	cues, err := ReadCues(path)
+	if err != nil || len(cues) != 1 || cues[0].StartSeconds != cues[0].EndSeconds {
+		t.Fatalf("零时长条目应保留：%v %v", cues, err)
+	}
+}

@@ -1,6 +1,7 @@
 package scene
 
 import (
+	"github.com/chouheiwa/articale-to-motion/internal/determinism"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,5 +109,45 @@ func TestBuildPromptCarriesRetryNote(t *testing.T) {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("提示词缺少 %q", want)
 		}
+	}
+}
+
+// TestBuildPromptAnnouncesDeterminismGate：源码扫描判失败不重试，渲染器必须事先
+// 知道哪些写法会被拦、豁免怎么写；豁免标记必须与扫描器认的是同一个字符串。
+func TestBuildPromptAnnouncesDeterminismGate(t *testing.T) {
+	dir := writeScene(t, `{"id":"scene-001","duration_seconds":1,"output":"out.mp4","transcript":"transcript.srt","text":"hello"}`)
+	s, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt, err := BuildPrompt(s, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"确定性（强制", "Math.random()", "requestAnimationFrame", "完整版本号", determinism.AllowMarker} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("提示词缺少 %q", want)
+		}
+	}
+}
+
+// TestBuildPromptCarriesRenderWorkerBudget：并发渲染时每镜头的 worker 数写进
+// 提示词；单镜头渲染不写，沿用上游 auto。
+func TestBuildPromptCarriesRenderWorkerBudget(t *testing.T) {
+	dir := writeScene(t, `{"id":"scene-001","duration_seconds":1,"output":"out.mp4","transcript":"transcript.srt","text":"hello"}`)
+	s, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	solo, _ := BuildPrompt(s, nil)
+	if strings.Contains(solo, "--workers") {
+		t.Error("单镜头渲染不应限制 worker 数")
+	}
+	shared, _ := BuildPrompt(s.WithRenderWorkers(3), nil)
+	if !strings.Contains(shared, "--workers 3") {
+		t.Error("并发渲染时提示词应带 --workers 3")
+	}
+	if s.RenderWorkers != 0 {
+		t.Error("WithRenderWorkers 不得修改原镜头")
 	}
 }

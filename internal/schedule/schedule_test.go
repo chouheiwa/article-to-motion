@@ -389,3 +389,56 @@ func TestRetryCarriesPreviousFailure(t *testing.T) {
 		}
 	}
 }
+
+func withDuration(s scene.Scene, seconds float64) scene.Scene {
+	s.DurationSeconds = seconds
+	return s
+}
+
+// TestRunAllDispatchesLongestFirstButReportsInTimelineOrder：单 worker 时派发顺序
+// 就是执行顺序，能直接观测；报告必须仍按时间轴顺序，拼接与审阅都依赖它。
+func TestRunAllDispatchesLongestFirstButReportsInTimelineOrder(t *testing.T) {
+	root := t.TempDir()
+	scenes := []scene.Scene{
+		withDuration(testScene(t, root, "scene-001"), 2),
+		withDuration(testScene(t, root, "scene-002"), 9),
+		withDuration(testScene(t, root, "scene-003"), 2),
+		withDuration(testScene(t, root, "scene-004"), 5),
+	}
+	var mu sync.Mutex
+	var started []string
+	report := RunAll(context.Background(), scenes, 1, 0, func(_ context.Context, s scene.Scene) error {
+		mu.Lock()
+		started = append(started, s.ID)
+		mu.Unlock()
+		return nil
+	})
+	if got := strings.Join(started, ","); got != "scene-002,scene-004,scene-001,scene-003" {
+		t.Fatalf("应按时长降序派发、同长保持原序，实际 %s", got)
+	}
+	var reported []string
+	for _, result := range report.Scenes {
+		reported = append(reported, result.SceneID)
+	}
+	if got := strings.Join(reported, ","); got != "scene-001,scene-002,scene-003,scene-004" {
+		t.Fatalf("报告应按时间轴顺序，实际 %s", got)
+	}
+	if scenes[0].ID != "scene-001" {
+		t.Fatal("DispatchOrder 不得改动调用方的切片")
+	}
+}
+
+func TestRenderWorkers(t *testing.T) {
+	cases := []struct{ cpus, jobs, want int }{
+		{10, 1, 0}, // 单镜头：沿用上游 auto
+		{10, 3, 2}, // (10-2)/3
+		{16, 3, 4}, // (16-2)/3
+		{4, 3, 1},  // 核不够分时至少 1
+		{2, 16, 1},
+	}
+	for _, tc := range cases {
+		if got := RenderWorkers(tc.cpus, tc.jobs); got != tc.want {
+			t.Errorf("RenderWorkers(%d, %d) = %d，期望 %d", tc.cpus, tc.jobs, got, tc.want)
+		}
+	}
+}

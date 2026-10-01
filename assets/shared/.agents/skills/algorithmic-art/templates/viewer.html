@@ -231,12 +231,12 @@ const ART = {
     if (ART.progressive) { ART.step(ctx, p, simState, frame, simRng, simNoise); frame++; }
     else { const total = Math.max(1, Math.round((ART.duration || 8) * 60));
       fullRender(canvas, 1, (frame % total) / total); frame++; }
-    raf = requestAnimationFrame(tick);
+    raf = requestAnimationFrame(tick); // am-allow-nondeterministic: 仅预览播放，渲染走 __art.renderFrame
   }
   function regenerate() {
     if (raf) cancelAnimationFrame(raf); raf = null;
-    if (ART.progressive) { resetSim(); raf = requestAnimationFrame(tick); }
-    else if (ART.animated) { frame = 0; raf = requestAnimationFrame(tick); }
+    if (ART.progressive) { resetSim(); raf = requestAnimationFrame(tick); } // am-allow-nondeterministic: 仅预览播放
+    else if (ART.animated) { frame = 0; raf = requestAnimationFrame(tick); } // am-allow-nondeterministic: 仅预览播放
     else fullRender(canvas, 1, 0);
   }
   // --- export: deterministic re-render at scale ---
@@ -315,7 +315,7 @@ const ART = {
   }
   document.getElementById("seed-prev").onclick = () => setSeed(p.seed - 1);
   document.getElementById("seed-next").onclick = () => setSeed(p.seed + 1);
-  document.getElementById("seed-rand").onclick = () => setSeed(1 + Math.floor(Math.random() * 99999));
+  document.getElementById("seed-rand").onclick = () => setSeed(1 + Math.floor(Math.random() * 99999)); // am-allow-nondeterministic: 「随机种子」按钮，渲染时无点击
   seedInput.onchange = () => setSeed(parseFloat(seedInput.value));
   document.getElementById("regen").onclick = regenerate;
   document.getElementById("reset").onclick = () => {
@@ -328,7 +328,7 @@ const ART = {
     if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
     if (e.key === "ArrowLeft") setSeed(p.seed - 1);
     if (e.key === "ArrowRight") setSeed(p.seed + 1);
-    if (e.key === "r" || e.key === "R") setSeed(1 + Math.floor(Math.random() * 99999));
+    if (e.key === "r" || e.key === "R") setSeed(1 + Math.floor(Math.random() * 99999)); // am-allow-nondeterministic: 键盘换种子，渲染时无输入
     if (e.key === "e" || e.key === "E") exportPNG(1);
   });
   // --- capture hooks (see scripts/capture_frames.mjs) ---

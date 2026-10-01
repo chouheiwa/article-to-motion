@@ -80,8 +80,11 @@ Edit `article-to-motion.conf` to choose the orchestrator and renderer (they may 
 ORCHESTRATOR=codex
 RENDERER=claude
 TTS_PROVIDER=minimax
+ALIGN_PROVIDER=auto
 SCENE_JOBS=3
 ```
+
+`TTS_PROVIDER` accepts `minimax`, `bailian`, `edge` (no credentials, good for previews), `elevenlabs`, `tencent`, and `mlx` (local and offline, Apple Silicon only); credentials always go through each tool's own login command. `ALIGN_PROVIDER` picks the known-text forced aligner and defaults to `auto`: mlx-audio's Qwen3-ForcedAligner on Apple Silicon, FunASR elsewhere. For TTS paths without built-in character-level timestamps, it produces the subtitle timeline.
 
 Priority: environment variables > project `.env` > config file > built-in defaults. The project `.env` must not store API Keys, Tokens, Secrets, or Passwords.
 
@@ -147,12 +150,19 @@ A successful render is not a correct picture: text can be unreadable against the
 am scene frames scenes/scene-001 --at 0,50%,end
 am scene frames scenes/scene-001 --at 0 --check-blank   # a blank cover frame fails
 
+# Statically scan composition sources for nondeterminism (the post-render check runs the same rules)
+am scene lint scenes/scene-001
+
 # Concatenate scenes in order into a silent master, stream-copied when specs match
 am concat scenes/ --out production/silent-master.mp4 --dry-run
 am concat scenes/ --out production/silent-master.mp4
 ```
 
 `am concat` deliberately offers no retiming. A resolution or frame-rate mismatch fails and asks you to re-render the scene rather than scaling or resampling — the former loses quality, the latter moves the timeline.
+
+Besides canvas, frame rate, duration, and silence, the scene output check scans the HTML/JS/CSS the render actually loads: reading the clock, `Math.random()`, `requestAnimationFrame`, `setInterval`, infinite `repeat`, render-time network access, web fonts, and CDN libraries without a full version pin all make the same frame differ between renders. Any hit fails the scene without a retry. Interactive code that the render path never reaches can be exempted with an `am-allow-nondeterministic: reason` comment on the same line; exemptions still appear in the report.
+
+`am scene run-all` dispatches the longest scenes first so a long scene at the end of the timeline does not stretch the whole batch on its own. When rendering in parallel it gives each scene `(CPU cores - 2) / jobs` HyperFrames `--workers`, so concurrent renders do not each size themselves for the whole machine and oversubscribe CPU and memory.
 
 ## Validate, archive, and develop
 
@@ -170,6 +180,14 @@ am validate cast --project-root .
 am validate video production/silent-master.mp4 --silent --decode
 am validate video final.mp4 --audio --expect-frames 8340 --check-frame-zero \
   --report-json production/final-check.json
+
+# Compare the subtitle timeline with the narration: an energy envelope independently decides
+# when there is sound, catching global offsets and uncovered speech
+am audio check --audio production/audio/voice.wav --srt production/audio/voice.srt
+
+# Whole-film review: audio/video stream lengths, total frames vs. the scene sum, frames at
+# every cut, plus per-scene contact sheets
+am review final.mp4 --scenes scenes/ --out production/review
 
 am archive --dry-run
 am archive

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/chouheiwa/articale-to-motion/internal/config"
+	"github.com/chouheiwa/articale-to-motion/internal/determinism"
 	"github.com/chouheiwa/articale-to-motion/internal/envutil"
 	"github.com/chouheiwa/articale-to-motion/internal/mediaprobe"
 	"github.com/chouheiwa/articale-to-motion/internal/tools"
@@ -152,7 +153,9 @@ func (e *VerificationError) Error() string {
 
 // VerifyOutput 校验镜头产物是否符合执行契约。
 //
-// 检查画幅、帧率、时长和「必须静音无音轨」四项，缺一项都会让错误在成片阶段才暴露：
+// 检查画幅、帧率、时长和「必须静音无音轨」四项，缺一项都会让错误在成片阶段才暴露。
+// 另外静态扫描合成源码的确定性（internal/determinism）：读时钟、未播种随机数、
+// requestAnimationFrame 这类写法渲染照样成功，要到重渲染对不上时才暴露。
 //
 //   - 画幅：style_guide 声明了画布，渲染成别的尺寸无法靠后期规范化补救——
 //     把 720p 拉伸到 1080 是画质损失而不是格式统一。
@@ -201,7 +204,14 @@ func VerifyOutput(s Scene, baseEnv map[string]string, tolerance float64) error {
 		Tolerance:       tolerance,
 		Audio:           mediaprobe.AudioAbsent,
 	}
-	if problems := spec.Check(media); len(problems) > 0 {
+	problems := spec.Check(media)
+	// 源码扫描与规格检查一起报：两类问题常同时出现，分两轮发现就要多烧一次渲染。
+	scan, err := determinism.Scan(s.Directory)
+	if err != nil {
+		return err
+	}
+	problems = append(problems, scan.Problems()...)
+	if len(problems) > 0 {
 		return &VerificationError{Output: s.Output, Problems: problems}
 	}
 	return nil

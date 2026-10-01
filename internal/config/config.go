@@ -19,17 +19,16 @@ const (
 	MaxSceneJobs     = 16
 )
 
-var (
-	validTTS  = map[string]bool{"minimax": true, "bailian": true}
-	secretKey = regexp.MustCompile(`(?i)(API_KEY|TOKEN|SECRET|PASSWORD)$`)
-)
+var secretKey = regexp.MustCompile(`(?i)(API_KEY|TOKEN|SECRET|PASSWORD)$`)
 
 type Config struct {
 	Orchestrator string
 	Renderer     string
 	TTSProvider  string
-	SceneJobs    int
-	Overlay      map[string]string
+	// AlignProvider 是已解析的对齐工具，auto 已落成具体取值。
+	AlignProvider string
+	SceneJobs     int
+	Overlay       map[string]string
 }
 
 func envMap() map[string]string {
@@ -98,9 +97,14 @@ func Load(root string, environ map[string]string) (Config, error) {
 	if !tools.ValidTools[cfg.Renderer] {
 		return Config{}, fmt.Errorf("无效的 RENDERER: %s（可选：codex claude qoder codebuddy opencode）", cfg.Renderer)
 	}
-	if !validTTS[cfg.TTSProvider] {
-		return Config{}, fmt.Errorf("无效的 TTS_PROVIDER: %s（可选：minimax bailian）", cfg.TTSProvider)
+	if !validTTSProvider(cfg.TTSProvider) {
+		return Config{}, fmt.Errorf("无效的 TTS_PROVIDER: %s（可选：%s）", cfg.TTSProvider, TTSProviderIDs())
 	}
+	align := resolve("ALIGN_PROVIDER", AlignAuto)
+	if align != AlignAuto && !validAligner(align) {
+		return Config{}, fmt.Errorf("无效的 ALIGN_PROVIDER: %s（可选：%s）", align, AlignerIDs())
+	}
+	cfg.AlignProvider = hostAligner(align)
 	cfg.SceneJobs, err = strconv.Atoi(resolve("SCENE_JOBS", strconv.Itoa(DefaultSceneJobs)))
 	if err != nil || cfg.SceneJobs < 1 || cfg.SceneJobs > MaxSceneJobs {
 		return Config{}, fmt.Errorf("SCENE_JOBS 必须在 1..%d 之间", MaxSceneJobs)
@@ -135,6 +139,9 @@ func (c Config) ChildEnvironment(base map[string]string, unsafe bool, passthroug
 	out["ORCHESTRATOR"] = c.Orchestrator
 	out["RENDERER"] = c.Renderer
 	out["TTS_PROVIDER"] = c.TTSProvider
+	if c.AlignProvider != "" {
+		out["ALIGN_PROVIDER"] = c.AlignProvider
+	}
 	if unsafe {
 		out["AM_UNSAFE"] = "1"
 	}

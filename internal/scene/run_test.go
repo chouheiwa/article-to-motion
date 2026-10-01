@@ -226,3 +226,25 @@ func TestRunReportsRendererFailure(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// TestVerifyOutputRejectsNondeterministicSource：规格全对、源码读了时钟的产物
+// 渲染时照样退出码 0，只有源码扫描拦得住；它和规格问题一样走 VerificationError，
+// 调度层据此不重试。
+func TestVerifyOutputRejectsNondeterministicSource(t *testing.T) {
+	dir := writeScene(t, `{"id":"scene-001","duration_seconds":1,"output":"out.mp4","transcript":"transcript.srt","text":"hello"}`)
+	s, _ := Load(dir)
+	bin := t.TempDir()
+	fakeFfprobe(t, bin, probeReply{})
+	os.WriteFile(s.OutputPath(), []byte("video"), 0o644)
+	env := map[string]string{"PATH": bin, "HOME": t.TempDir()}
+	os.WriteFile(filepath.Join(dir, "index.html"), []byte("<script>\nconst seed = Date.now();\n</script>"), 0o644)
+	err := VerifyOutput(s, env, 0.15)
+	var verification *VerificationError
+	if !errors.As(err, &verification) || !strings.Contains(err.Error(), "index.html:2 [clock]") {
+		t.Fatalf("读时钟的源码应被判为 VerificationError：%v", err)
+	}
+	os.WriteFile(filepath.Join(dir, "index.html"), []byte("<script>const tl = gsap.timeline({ paused: true });</script>"), 0o644)
+	if err := VerifyOutput(s, env, 0.15); err != nil {
+		t.Fatalf("干净源码不应被拦：%v", err)
+	}
+}

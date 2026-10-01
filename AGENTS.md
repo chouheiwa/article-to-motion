@@ -125,6 +125,10 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 
 校验失败返回 `*scene.VerificationError`，`cli` 把它包成 `schedule.Fatal` 停止重试。规格不符是确定性的，重跑只会得到同样的产物，而每次重试都是一次完整的 AI CLI 调用。**新增确定性失败时记得走同一条路。**
 
+`scene.VerifyOutput` 还会跑 `internal/determinism` 的源码扫描：从合成入口沿本地引用展开，只扫渲染真正加载的文件，命中同样返回 `VerificationError`。规则只收「上游禁令里有、HyperFrames lint 不查、几乎没有合法用途」的写法；`setTimeout` 刻意不收，等字体就绪的代码里太常见。新增规则前先拿内置技能与上游技能的示例跑一遍——`TestEmbeddedViewerTemplatePasses` 钉着 algorithmic-art 的 viewer 模板，它的交互路径靠逐行 `am-allow-nondeterministic` 豁免。误判一次，这道门就没人信了。
+
+成片级检查有两条：`am review` 比对音视频流时长、总帧数与镜头帧数之和、镜头交界帧并出联系表；`am audio check` 用能量包络独立校验字幕时间轴。两者把切黑转场、字幕延长停留这类「机器分不清有意还是事故」的情况放进 hints，不改变退出码。
+
 `mediaprobe` / `concat` 的集成测试需要真实 ffmpeg，缺失时自行跳过。CI 装了 ffmpeg——不装的话测试仍然"通过"但覆盖率掉到门禁线以下，真正跑外部命令的代码再没被验证过。
 
 ## 公开树边界
@@ -148,6 +152,18 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 同时更新 `assets/shared/article-to-motion.conf`、`assets/shared/.env.example`、`README.md`、`README.en.md` 里的可选值注释。
 
 安全模式的权限模式必须实测能跑通渲染命令。claude 的 `acceptEdits` 只自动批准文件编辑、拦下所有 Bash，而 `-p` 下没人批准，渲染器会执行不了 `npx hyperframes render`；`scene.RendererAccess` 列出要放行的最小命令集（带固定版本的 hyperframes、`ls`、`ffprobe`）与技能目录读取，`.env` 始终禁读。
+
+## 新增一个 TTS 或对齐工具
+
+配音与对齐由编排工具按提示词执行，`am` 只登记取值并做与工具无关的校验。取值表在 `internal/config/providers.go`（`TTSProviders` / `Aligners`），校验与 `am config get` 的帮助都从它派生。加一个工具要同步：
+
+| 位置 | 作用 |
+|---|---|
+| `internal/config/providers.go` | 取值、名称、自带时间戳粒度 |
+| `internal/preset/gen/templates/PROMPT-PRODUCTION.md` 第三、四阶段 | 安装、登录、合成与取时间戳的具体命令，改完跑 `go generate` |
+| `assets/shared/article-to-motion.conf`、`.env.example`、两份 README | 可选值注释 |
+
+收录门槛是「有可非交互调用的 CLI，且凭据不必落进项目文件」。写进提示词的命令要实测过；跑不了的（没有账号）照官方文档写，并让编排工具先打印返回结构再解析。没有自带字级时间戳的路径，`voice.srt` 一律由强制对齐生成，不拿句级时间戳凑。
 
 ## 子进程环境
 

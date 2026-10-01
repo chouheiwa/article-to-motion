@@ -244,6 +244,32 @@ func retryNote(s scene.Scene, reason, archived string) string {
 	return fmt.Sprintf("- 失败原因：%s\n- 上一次的输出流与错误日志已归档到 %s/，先读它们的末尾定位问题。", reason, filepath.ToSlash(relative))
 }
 
+// DispatchOrder 返回派发顺序：时长长的镜头先派发，时长相同时保持时间轴顺序。
+//
+// 镜头之间没有依赖，总耗时由最后完成的那个 worker 决定。按时间轴顺序派发时，
+// 排在末尾的长镜头会在其他 worker 都空闲后才开始，独自拖长整批耗时；先派发
+// 长镜头（LPT）让短镜头去填后面的空隙。渲染耗时与帧数大致成正比，时长是
+// 手头最好的估计。报告仍按时间轴顺序输出，与派发顺序无关。
+func DispatchOrder(scenes []scene.Scene) []scene.Scene {
+	ordered := append([]scene.Scene(nil), scenes...)
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].DurationSeconds > ordered[j].DurationSeconds })
+	return ordered
+}
+
+// RenderWorkers 给出每个镜头渲染可用的帧捕获 worker 数。
+//
+// HyperFrames 的 --workers auto 为单次渲染独占整机设计（0.8.14 源码）：worker
+// 数取「核数 - 2」「一半系统内存 / 1.5GB」「帧数 / 30」与上限
+// max(6, min(16, 核数/8)) 中的最小值。jobs 个镜头同时渲染时这些估算互不知情，
+// 每个都按独占 CPU 和一半内存算，合起来会超订。按 (核数 - 2) / jobs 均分，留两个核
+// 给编码与系统；jobs 为 1 时返回 0，表示沿用上游的 auto。
+func RenderWorkers(cpus, jobs int) int {
+	if jobs <= 1 {
+		return 0
+	}
+	return max(1, (cpus-2)/jobs)
+}
+
 func RunAll(ctx context.Context, scenes []scene.Scene, jobs, retries int, runner Runner) Report {
 	started := time.Now()
 	if jobs < 1 {
@@ -304,7 +330,7 @@ func RunAll(ctx context.Context, scenes []scene.Scene, jobs, retries int, runner
 	}
 	go func() {
 		defer close(tasks)
-		for _, s := range scenes {
+		for _, s := range DispatchOrder(scenes) {
 			select {
 			case tasks <- s:
 			case <-ctx.Done():

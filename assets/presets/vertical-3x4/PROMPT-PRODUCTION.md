@@ -87,7 +87,18 @@
 
 ## 第三阶段：TTS 和断句校对
 
-TTS 工具由 `article-to-motion.conf`（或环境变量 `TTS_PROVIDER`）决定，可选 `minimax` 或 `bailian`。两条路径的凭据、命令和时间戳获取方式不同，但断句检查、审核关卡和产物要求完全一致。
+TTS 工具由 `article-to-motion.conf`（或环境变量 `TTS_PROVIDER`）决定，用 `am config get TTS_PROVIDER` 读取解析结果。可选：
+
+| 取值 | 服务 | 自带时间戳 | 适合 |
+|---|---|---|---|
+| `minimax` | MiniMax（`mmx`） | 句级 | 默认，中文自然度与发音控制最完整 |
+| `bailian` | 阿里云百炼（`bl`） | 无，需识别 | 已有百炼额度 |
+| `edge` | 微软 Edge 在线语音（`edge-tts`） | 句级，偏粗 | 免鉴权的预览与草稿 |
+| `elevenlabs` | ElevenLabs（官方 CLI） | 字级 | 中英混排、需要字级时间戳 |
+| `tencent` | 腾讯云语音合成（`tccli`） | 有 | 已有腾讯云账号 |
+| `mlx` | 本机 MLX（`mlx-audio`，仅 Apple Silicon） | 无 | 离线、不产生费用 |
+
+各路径的凭据、命令和时间戳获取方式不同，但断句检查、审核关卡和产物要求完全一致。无论哪条路径，第三阶段结束时都必须得到 `production/audio/voice.wav` 与毫秒精度的 `production/audio/voice.srt`；自带时间戳为「无」的路径，`voice.srt` 由第四阶段开头的强制对齐生成。
 
 ### 凭据与配置
 
@@ -108,16 +119,41 @@ TTS 工具由 `article-to-motion.conf`（或环境变量 `TTS_PROVIDER`）决定
 - 密钥只存在于登录命令与 `~/.bailian/config.json`，不得写入项目 `.env`、脚本、Markdown、JSON、命令行参数或日志；日志只能记录是否已登录、额度等状态，不得打印密钥值或包含密钥的 URL。
 - 用 `bl usage free` 或 `bl usage stats` 查看剩余额度。
 
+**Edge 在线语音（`TTS_PROVIDER=edge`）**
+
+- 用 `pipx install edge-tts`（或 `uv tool install edge-tts`）安装，免鉴权。
+- 它调用的是微软 Edge 浏览器的朗读接口，不是有服务承诺的商用 API，随时可能失效或限流。只用于预览和草稿；正式交付前确认用户接受这一点，否则换其他路径。
+
+**ElevenLabs（`TTS_PROVIDER=elevenlabs`）**
+
+- 用 `brew install elevenlabs/tap/elevenlabs` 或 `npm install -g @elevenlabs/cli` 安装官方 CLI。
+- 先用 `elevenlabs auth login` 登录，凭据存进系统钥匙串，不进入项目目录。不得在项目 `.env` 写 `ELEVENLABS_API_KEY`：这个 CLI 会自动加载当前目录的 `.env`，`am` 也会拒绝在 `.env` 里出现密钥的项目。
+- 密钥不得写入脚本、Markdown、JSON、命令行参数或日志。
+
+**腾讯云（`TTS_PROVIDER=tencent`）**
+
+- 用 `pip install tccli` 或 `brew tap tencentcloud/tccli && brew install tccli` 安装官方 CLI。
+- 用 `tccli configure` 交互配置凭据，凭据保存在用户目录，不进入项目目录；不得把 SecretId / SecretKey 写进项目文件、命令行参数或日志。
+
+**本机 MLX（`TTS_PROVIDER=mlx`）**
+
+- 仅限 Apple Silicon。用 `uv tool install --prerelease=allow mlx-audio` 安装，免鉴权；首次运行会下载模型到用户缓存目录。
+
 ### 试听和正式生成
 
 - 音色尚未确定时，先列出可用音色，选择中文（普通话）真诚成年男声对应的 voice ID，记录到 `production/production-config.json` 的 `ttsVoiceId`。
   - MiniMax：`mmx speech voices`
   - 百炼：`bl speech synthesize --list-voices --model cosyvoice-v3-flash`
+  - Edge：`edge-tts --list-voices | grep zh-CN`
+  - ElevenLabs：`elevenlabs voices search --format json`
+  - 腾讯云：CLI 没有列表命令，按官方「音色列表」文档选择 `VoiceType`
+  - MLX：Qwen3-TTS 预置中文音色 `Vivian`、`Serena`、`Uncle_Fu`、`Dylan`（北京话）、`Eric`（四川话）
 - 用同一段 10–20 秒代表性文案生成 2–3 个试听版本（`--out production/audio/try-<voiceId>.wav`），文件名包含 voice ID。
 - 音色、语速确认后再生成正式配音。
 - 优先按完整语义段落调用 TTS，避免按字幕行逐条生成造成语调碎裂。
 - 正式生成前，先扫描终稿全文，把容易误读的英文单词、英文缩写、产品名、模型名、专有名词和数字逐一列出并确定预期读音，再写入对应 TTS 的发音控制；同一词出现多次也要统一。不要靠生成后试听再补。
 - 四位数年份一律逐位读：`1972 年` 读「一九七二年」，`2025 年` 读「二零二五年」，`2026 年 2 月` 读「二零二六年二月」，`1970 年代` 读「一九七零年代」；不得读成「一千九百七十二年」「两千零二十五年」。扫描时把全文每一个四位年份都列入发音控制，不要交给 TTS 自行判断：同一音色对不同年份、不同上下文的处理并不一致。其余数量数字（`16 个`、`815 字`、`64KB`）仍按数值读。
+- 把实际送进 TTS 的完整文本（已做年份、读音等改写）保存为 `production/audio/tts-text.txt`，第四阶段强制对齐要用它。
 - 保留原始请求命令（去掉密钥）、CLI 返回的元数据（时长、采样率、大小）、原始音频和时间戳文件，写入生成报告。
 - 不得手工伪造服务返回的时间戳。
 
@@ -147,6 +183,30 @@ TTS 工具由 `article-to-motion.conf`（或环境变量 `TTS_PROVIDER`）决定
   - 中文多音字用 `alphabet="py"`，例如 `<phoneme alphabet="py" ph="he2">和</phoneme>`。
 - 四位年份：在送进 TTS 的文本里直接写成逐位汉字（`2025 年` 写「二零二五年」），不依赖 SSML 数字读法。字幕仍显示原文的阿拉伯数字：从 ASR 结果重建 `voice.srt` 时，按终稿把这些年份换回原写法，并在生成报告里列出替换清单。
 
+**Edge 固定参数**
+
+- 命令：`edge-tts -v <voiceId> --rate=<±N%> -f production/audio/tts-text.txt --write-media production/audio/voice.mp3 --write-subtitles production/audio/edge.srt`。语速写成百分比，负数必须用等号连写（`--rate=-2%`），否则被当成另一个参数。
+- 只输出 24kHz 单声道 MP3，用 FFmpeg 转成 `voice.wav`（48kHz 双声道）供后续混音。
+- 不支持自定义 SSML，发音控制只能改写送进 TTS 的文本：年份写成逐位汉字，易误读的英文写成能读对的形式；字幕仍显示终稿原文，替换清单写进生成报告。
+- `edge.srt` 是句级时间戳，实测起点比发声早约 0.1–0.2 秒，结尾还把句间停顿算进去。它只能做参考，`voice.srt` 必须由第四阶段的强制对齐生成。
+
+**ElevenLabs 固定参数**
+
+- 用带时间戳的合成命令：`elevenlabs text-to-speech convert_with_timestamps --voice-id <voiceId> --model-id eleven_multilingual_v2 --text "..." --voice-settings.speed <confirmedSpeed> --output-format mp3_44100_128 --format json > production/audio/tts-001.json`。
+- 返回 JSON 里同时有 base64 编码的音频和字级对齐（`alignment` 下的 `characters`、`character_start_times_seconds`、`character_end_times_seconds`）。先打印 JSON 的字段名确认结构再解析：解码音频后转成 `voice.wav`，按字级时间合成句级 `voice.srt`。
+- 数字读法用 `--apply-text-normalization on` 交给服务处理，但四位年份仍在文本里预先写成逐位汉字。
+
+**腾讯云固定参数**
+
+- 单次请求最多 150 个汉字（全角标点也算一个字），必须按句切段，每段一次请求：`tccli tts TextToVoice --region ap-guangzhou --Text "..." --SessionId <uuid> --VoiceType <voiceId> --Codec wav --SampleRate 16000 --Speed <confirmedSpeed> --EnableSubtitle True > production/audio/tts-NNN.json`。`--Speed` 取值 -2 到 6，0 是正常语速。
+- 每段输出里的 `Audio` 是 base64 音频，`Subtitles` 是该段内的时间戳（毫秒）。各段音频按顺序拼接；字幕时间要加上该段在整条配音中的起点，起点用 `ffprobe` 实测前面各段的时长累加，不得按字数估算。拼接后的整条时间戳只能作为参考，`voice.srt` 仍以第四阶段强制对齐为准。
+
+**MLX 固定参数**
+
+- 命令：`mlx_audio.tts.generate --model mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit --text "..." --voice <voiceId> --lang_code Chinese --output_path production/audio --file_prefix voice --join_audio --audio_format wav`。`--lang_code Chinese` 必须显式传，缺省按英文合成；不加 `--join_audio` 时会按文本分段输出多个文件。输出是 24kHz 单声道，用 FFmpeg 转成 48kHz 双声道再混音。
+- 不产出时间戳，`voice.srt` 由第四阶段强制对齐生成。
+- 发音控制同 Edge，只能改写送进 TTS 的文本。
+
 ### 断句检查
 
 重点检查：
@@ -175,8 +235,50 @@ TTS 工具由 `article-to-motion.conf`（或环境变量 `TTS_PROVIDER`）决定
 
 ## 第四阶段：依据实际语音重建 SRT
 
+### 强制对齐与时间轴校验
+
+文稿是现成的，把它逐字对到配音上比语音识别更准，也不会把专有名词识别错。对齐工具由 `ALIGN_PROVIDER` 决定，用 `am config get ALIGN_PROVIDER` 读取：缺省在 Apple Silicon 上是 `mlx`，其余平台是 `funasr`。
+
+送进对齐的文本必须是实际送进 TTS 的那份（年份已写成逐位汉字等），对齐完再按替换清单映射回终稿原文。先用 FFmpeg 把 `voice.wav` 转成 16kHz 单声道的 `production/audio/voice-16k.wav`。
+
+**`mlx`（Qwen3-ForcedAligner）**
+
+- 安装同 MLX 语音合成（`uv tool install --prerelease=allow mlx-audio`）。
+- 命令：`mlx_audio.stt.generate --model mlx-community/Qwen3-ForcedAligner-0.6B-8bit --audio production/audio/voice-16k.wav --text "$(cat production/audio/tts-text.txt)" --language Chinese --output-path production/audio/align --format json`，结果写到 `production/audio/align.json`（`--output-path` 是不带扩展名的文件路径，不是目录）。
+- `--language Chinese` 必须显式传，缺省是英文。
+- 输出按单字给出开始、结束秒数，粒度约 0.08 秒；标点会被丢掉，按顺序与原文逐字对回。
+- 单次最多 5 分钟音频。更长的配音在句间停顿处切段分别对齐，再按各段起点平移；切点从下面 `am audio check` 报告的 `speech` 区间之间选，不要切在发声中间。
+
+**`funasr`（时间戳预测）**
+
+- 安装：`pip install funasr torch torchaudio`。没有命令行入口，用 Python 调用：
+
+  ```python
+  from funasr import AutoModel
+  model = AutoModel(model="iic/speech_timestamp_prediction-v1-16k-offline")
+  result = model.generate(input=("production/audio/voice-16k.wav", "实际送进 TTS 的文本"), data_type=("sound", "text"))
+  print(result)
+  ```
+
+- 先打印结果确认结构，再按逐字时间戳合成句级 SRT。
+
+对齐结果保存为 `production/audio/align.json`（分段对齐时用 `align-NN.json`），并据此生成（或替换）`production/audio/voice.srt`。
+
+**每次得到或改动 `voice.srt` 后，都要用配音本身做一次独立校验：**
+
+```bash
+am audio check --audio production/audio/voice.wav --srt production/audio/voice.srt \
+  --report-json production/audio/voice-check.json
+```
+
+它不识别文字，只用能量包络判定每一刻有没有声音，所以与时间戳来自哪里无关。判断结果读 `voice-check.json`：
+
+- `problems` 里是字幕早于或晚于发声、整段落在静音里、发声没有字幕覆盖等问题，必须修掉再继续。优先换用强制对齐或修正对齐输入，不得手工挪时间码凑数。
+- `hints` 里的「整体偏移」说明时间戳来源有系统误差，要整体校正；「结尾停留」对 TTS 或对齐直接产出的 `voice.srt` 说明它偏晚。
+- `transcription-production.srt` 生成后同样跑一次。终稿字幕按可读单元延长停留是允许的，所以它的「结尾停留」提示可以保留，但 `problems` 必须为空。
+
 - 参考 SRT 只用于理解原始内容和大致节奏。没有已录配音时，不把参考时间码当作最终时间码。
-- 以第三阶段产出的 `production/audio/voice.srt` 真实时间戳生成 `transcription-production.srt`。MiniMax 由 `--subtitles` 直接产出；百炼由 ASR 识别后转换产出。该 SRT 已是毫秒精度的句级时间戳，可直接作为基础，再按可读语义单元微调。
+- 以 `production/audio/voice.srt` 的真实时间戳生成 `transcription-production.srt`。MiniMax 由 `--subtitles` 直接产出，百炼由 ASR 识别后转换产出，ElevenLabs 由字级对齐合成；Edge、腾讯云与 MLX 由下面的强制对齐生成。该 SRT 已是毫秒精度的句级时间戳，可直接作为基础，再按可读语义单元微调。
 - 字幕按可读语义单元切分，不能直接照搬 TTS 请求分段。
 - 时间使用毫秒精度，不得四舍五入或截断为整数秒。
 - 字幕之间的无文字间隔必须保留，用作呼吸、元素展示、镜头收尾或转场。
@@ -196,7 +298,7 @@ TTS 工具由 `article-to-motion.conf`（或环境变量 `TTS_PROVIDER`）决定
 
 ### 第四阶段补充：短语级语义时间轴
 
-句级 SRT 只能用于字幕和粗排，不能直接证明一句话内部的视觉顺序。凡一条字幕包含两个以上会分别显示的概念、动作、条件、结论或专有名词，必须依据真实音频执行词级或短语级强制对齐，并生成：
+句级 SRT 只能用于字幕和粗排，不能直接证明一句话内部的视觉顺序。凡一条字幕包含两个以上会分别显示的概念、动作、条件、结论或专有名词，必须依据真实音频执行词级或短语级强制对齐（工具同上，直接复用 `production/audio/align*.json` 的逐字结果），并生成：
 
 - `production/phrase-timeline.json`
 - `production/visible-event-inventory.json`
@@ -293,6 +395,8 @@ scenes/
 `--srt` 加 `--strict-coverage` 在开始渲染前核对镜头编号唯一性与「镜头总时长等于字幕跨度」。务必带上：这条规则本来就写在第五阶段，但漏掉一镜等到拼接时才发现的话，每一镜都已经烧掉一次完整的渲染调用。
 
 产物校验查画幅、帧率、时长和「必须无音轨」四项，画幅取自 `frame.md`。不符时回镜头工程重渲染，不要在后面的阶段缩放补救。
+
+产物校验还会静态扫描镜头合成源码：读时钟、`Math.random()`、`requestAnimationFrame`、`setInterval`、无限 `repeat`、渲染时联网、在线字体与未固定版本的 CDN 库都会让同一帧在两次渲染间不同，命中即判失败且不重试。改完合成代码、重渲染前可用 `am scene lint <镜头目录>` 先确认。
 
 `--report-json` 落盘的报告是判断结果的依据，不要去解析终端上的中文汇总。每个镜头一条记录，字段为 `scene_id`、`status`（`succeeded` / `skipped` / `stale` / `failed`）、`attempts`、`seconds`、`reason`；顶层还有 `counts`、`exit_code` 和 `interrupted`。被中断时报告照常落盘，据 `interrupted` 与各镜头 `status` 判断哪些还需要重跑。
 
@@ -420,6 +524,18 @@ am validate video <候选成片> --audio --expect-frames <冻结时间轴总帧�
 ```
 
 不符项会一次全部列出。判断结果读 `--report-json` 落盘的报告，`ok` 为 `false` 时 `problems` 数组里是全部不符项，`hints` 里是值得看一眼但不构成失败的观察（例如第 0 帧偏暗）。
+
+### 整片复查
+
+机器检查只看规格，拼接与混音之后才出现的问题要靠整片复查：
+
+```bash
+am review <候选成片> --scenes scenes/ --out production/review
+```
+
+它比对音轨与视频流各自的时长，精确统计总帧数并与各镜头帧数之和比对（漏拼、重拼、掉帧都会被拦下），检查每个镜头交界两侧的帧，并把每个镜头的首帧、中间帧、末帧拼成联系表。判断结果读 `production/review/review.json`：`ok` 为 `false` 时 `problems` 里是全部不符项；交界处的纯色帧只进 `hints`，因为切黑、切白可能是有意的转场，要你看图确认。
+
+机器检查通过后逐页打开 `production/review/sheet-NN.png` 做视觉复查：相邻镜头的风格、配色与画面密度是否一致，交界是否跳变突兀，结尾是否停在合适的画面。发现问题只重渲染相关镜头，重新拼接、混音后再复查一次。复查报告与联系表纳入审批绑定的检查文件。
 
 命令覆盖不到、仍需另行确认的：
 
