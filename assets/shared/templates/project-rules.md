@@ -17,6 +17,7 @@
 
 `am` 保证的契约不得改动，改了会直接报错或让产物失去确定性。
 
+- 根目录 `frame.md` 的 `style_id` 为 `custom-draft` 时，风格还没定稿：先按制作提示词的定风格阶段完成并通过 `am validate style`，再建镜头目录；`am scene run` 会拒绝草稿风格。
 - `scene.json` 只接受 `id`、`duration_seconds`、`output`、`transcript`、`text` 五个必填字段，以及 `style_guide`、`renderer` 两个可选字段。出现任何未知字段，`am scene run` 直接失败。
 - `duration_seconds` 保留 SRT 毫秒精度，写成小数秒（如 `2.833`、`6.500`），不得四舍五入或截断为整数秒。
 - `text` 中不得出现 `[[USER_MESSAGE]]` 或 `<scene-text>` 定界标记。

@@ -98,6 +98,21 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 
 新增风格要动的地方：`internal/preset/style.go` 加一条；在 `templates/styles/<风格>/` 写三份模板（`style_id` / `style_name` 必须与风格表一致，生成器会校验）；为每个画幅手绘 4 张示例 SVG，放进 `assets/styles/<风格>/<画幅>/assets/style-guide/examples/`；跑 `go generate` 与 `-examples`。四种镜头骨架的 id（`preset.ArchetypeIDs`）是叙事职责，所有风格共用、顺序固定，风格只换名字、用途说明和示例图。`TestInitEveryStyleAndCanvasPassesStyleValidation` 会对每个风格 × 画幅跑一遍 `am init` 加 `validate style`。
 
+### 自定义风格
+
+`am init --style custom --style-brief "…"` 不套内置风格：只写入描述（`docs/style-brief.md`）和草稿树 `assets/styles/custom-draft/<画幅>/`。草稿由 `go generate` 产出（模板在 `templates/styles/custom-draft/`），字段齐全但 token 只是默认风格的占位值，没有示例图。定稿由编排提示词的「第一阶段补充：定风格」完成，`TestProductionPromptCarriesCustomStyleStage` 钉着那一节。
+
+| 位置 | 约定 |
+|---|---|
+| `preset.CustomStyle` | 草稿身份（`style_id: custom-draft`）。**刻意不进 `builtinStyles`**——生成器、选择框和一串枚举内置风格的测试都遍历那张表，混进去会把草稿当成带示例图的正式风格 |
+| `preset.IsCustomStyleID` | 自定义风格的命名空间 `custom-<小写短名>`。内置风格不得以 `custom-` 开头 |
+| `validate.Style` | 草稿直接报「定风格阶段未完成」；定稿后说明书路径固定为 `preset.CustomStyle.GuideDoc()`，不从用户写的 `style_name` 拼；其余检查与内置风格相同 |
+| `validate.RegenerateExamples` | 自定义风格直接渲染项目里的四张 SVG，不重着色、不改写；草稿也放行。`am validate style --regenerate-examples` 因此先出图再校验 |
+| `scene.Load` | `style_guide` 仍是草稿时拒绝加载。`scene` 不依赖 `preset`，草稿 id 抄了一份常量，`TestDraftStyleIDMatchesPreset` 钉住两边一致 |
+| `am style fonts` / `add-font` | 字体只能来自 `preset.AllFonts`（与 `assets/fontpool/` 双向一致，`TestFontPoolMatchesAllFonts` 守着）或用户自带 woff2 |
+
+可选键 `mood_refs` 列氛围参照图，通常来自编排工具的内置生图（官方 Codex 的 `$imagegen`）。它**不查尺寸**——生图工具不能指定像素——也不当版式基准；`BuildPrompt` 会写明配色、字体、版式以 `frame.md` 为准。生图只在 ChatGPT 登录的官方 Codex 下才可能可用（API key 与第三方 provider 会被上游过滤），所以提示词把它写成可跳过的一步，不能变成定风格的前提。`CODEX_HOME` 为此进了安全模式白名单。
+
 ## Prompt 文件
 
 `assets/shared/PROMPT.md` 和 `assets/presets/<画幅>/PROMPT-PRODUCTION.md` 是内置资产，不是本仓库的文档。它们随 `am init` 下发到项目根，被 `am run` 直接喂给编排工具。`PROMPT-PRODUCTION.md` 是生成产物，改它要改 `internal/preset/gen/templates/PROMPT-PRODUCTION.md`。

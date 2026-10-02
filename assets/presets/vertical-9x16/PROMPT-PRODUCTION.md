@@ -52,6 +52,25 @@
 
 缺少文章、口播稿、参考字幕或已有配音中的全部内容时，停止并明确列出缺失输入。
 
+### 第一阶段补充：定风格（仅自定义风格）
+
+根目录 `frame.md` 的 `style_id` 为 `custom-draft` 时，项目用的是按文字描述定制的风格，必须先完成本节，再进入第二阶段；`style_id` 是其他值时跳过本节。风格未定稿时 `am scene run` 会直接拒绝渲染，所以这一步不能推迟。
+
+1. 读 `docs/style-brief.md`，把描述落成具体决定：品牌人格、适用题材、配色、字体角色、四种镜头骨架的版式、动效语法与禁用项。描述含糊时按最贴近原话的解释取舍，并把取舍写进 `production/style-decisions.md`；描述与本片内容明显冲突时停下来确认。
+2. 氛围参照图（可选）：若编排工具提供内置生图能力（例如 Codex 的 `$imagegen`），按描述生成一到两张氛围参照图，保存进 `assets/style-guide/mood/`——生成结果默认落在工具自己的数据目录，必须移进项目，否则后续镜头目录里解析不到。工具不提供生图能力、或调用提示该工具不可用时，直接跳过，不得为此安装别的生图工具或改用需要 API 密钥的方式。参照图只用于提炼质感、光影与装饰语言，配色要转成 `colors` 里的十六进制值，图里的文字与字形不得当成字体依据。
+3. 选字体：用 `am style fonts` 查看可用字体，用 `am style add-font <字体族> [--weight N]` 拷进项目。只能用这份清单里的字体，或用户已放进 `assets/fonts/` 并附带许可证的 woff2 文件；不得引用本机系统字体，也不得临时从网上下载字体。中文正文必须有中文字体覆盖。
+4. 改写 `frame.md` 的 frontmatter：
+   - `style_id` 改为 `custom-<小写英文短名>`（只用小写字母、数字和单个连字符），`style_name` 写这套风格的中文名，`scope` 写适用题材。
+   - `canvas` 与 `safe_area` 来自画幅预设，一个数字都不许改。
+   - `colors` 全部写六位十六进制色；`typography` 的字体栈只能使用 `typography.font_files` 声明过的字体族或通用族名，声明的每个字体都要被某个字体栈用到。
+   - `scene_archetypes` 的四个 `id` 与顺序固定，只改 `name` 与 `use_for`；`example_png` 保持 `assets/style-guide/examples/<id>.png`。
+   - 有氛围参照图时加上 `mood_refs`，列出它们的相对路径；没有就不写这个键。
+   - `motion`、`subtitles`、`cover`、`forbidden` 按风格调整，但 `cover.frame_zero_complete` 必须为 `true`、`cover.stable_frames` 不少于 18，`audio` 的采样率与声道不变。
+5. 用同一份 frontmatter 改写 `docs/自定义-视频风格说明书.md`，两份 frontmatter 必须逐项相同；说明书正文写清风格定位、配色用途、字体角色、四种骨架的版式要点、动效、字幕与封面、声音和验收清单。`frame.md` 正文改写成正式的使用说明，删掉草稿说明。
+6. 为四种骨架各画一张 1080×1920 的 SVG，存为 `assets/style-guide/examples/<id>.svg`。只用本风格声明的颜色与字体族（`font-family` 写族名），文字用本片真实的标题与要点，不放占位文字。示例图是所有镜头的版式基准，要体现骨架差异而不是同一张图换字。
+7. 运行 `am validate style --regenerate-examples` 渲染 PNG 并校验，逐条修正直到输出「风格规范校验通过」。打开 `assets/style-guide/examples/contact-sheet.png` 看一遍：字体是否渲染成声明的字体、配色与描述是否一致、四张骨架是否可区分；不满意就回到第 4 或第 6 步。
+8. 把最终的 `frame.md`、说明书、示例图与氛围参照图路径记入 `production/production-config.json`，并在执行日志里列出定稿的 `style_id`。定稿后本片内不得再改风格；要改就重新执行本节并重渲染全部镜头。
+
 ### 发布配置生命周期
 
 平台、终稿和封面方向冻结后，立即参考 `templates/publish.md` 在根目录生成首版 `publish.md`，状态通常为 `draft`。文档必须以安全 YAML frontmatter 提供机器字段，并以固定 Markdown 章节提供人工可复制内容；不得把通用模板或其他作品的发布文案直接当成项目结果。
@@ -379,6 +398,7 @@ scenes/
 - 把完整的 `transcription-production.srt` 复制为镜头目录中的 `transcription.srt`，让渲染工具理解全文上下文。
 - 仓库根目录存在视觉规范文件（如 `frame.md`）时必须复制进镜头目录，并在 `scene.json` 的 `style_guide` 中声明。声明后，画布规格、配色、字体层级和安全区会作为强制约束写进渲染提示词，这是跨镜头视觉一致性的唯一保障；声明了但文件不存在会报错。
 - 把视觉规范 `scene_archetypes` 各项 `example_png` 指向的示例图按**相同的相对路径**复制进镜头目录（默认即 `assets/style-guide/examples/`）。渲染工具在设计版式和画面自查时要对照它们；不复制的话，镜头目录里解析不到这些路径，渲染工具从未见过任何视觉参照。
+- 视觉规范声明了 `mood_refs` 时，把其中的氛围参照图同样按**相同的相对路径**复制进镜头目录。渲染工具只从中取质感与装饰语言，配色、字体与版式仍以视觉规范的数值为准。
 - 把视觉规范 `typography.font_files` 声明的字体文件按**相同的相对路径**复制进镜头目录（默认即 `assets/fonts/`），使规范里的路径在镜头目录内同样成立。渲染机是一台干净的无头 Chrome，不装任何系统字体：字体栈里没有 `@font-face` 的字体族会静默回退，本地渲染看着正常、成片排版却是错的，且不报错。中文字形只能由这些自带文件提供，不得改用 `PingFang SC`、`Hiragino Sans GB` 这类只存在于本机的系统字体。
 - 在 `prompt.md` 中写入创意描述，使艺术方向和视觉概念贴合当前文案，但不能改动 `am` 保证的执行契约。
 - 要求输出 1080×1920、30fps、静音、无音轨的 MP4。

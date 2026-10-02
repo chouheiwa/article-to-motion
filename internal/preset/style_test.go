@@ -47,3 +47,38 @@ func TestStyleByIDOrErrorListsChoices(t *testing.T) {
 		t.Fatalf("未知风格应报错并列出可选项，实际 %v", err)
 	}
 }
+
+// 自定义风格的草稿身份不能混进内置风格表：生成器、init 选择框与一串枚举
+// 内置风格的测试都遍历那张表，混进去会让它们把草稿当成一套正式风格。
+func TestCustomStyleStaysOutOfBuiltinTable(t *testing.T) {
+	if _, ok := StyleByID(CustomStyle.ID); ok {
+		t.Fatalf("草稿风格 %s 不应出现在内置风格表里", CustomStyle.ID)
+	}
+	if CustomStyle.ID != DraftStyleID {
+		t.Fatalf("草稿风格的 id 应是 %s，实际 %s", DraftStyleID, CustomStyle.ID)
+	}
+	for _, id := range StyleIDs() {
+		if IsCustomStyleID(id) {
+			t.Errorf("内置风格 %s 落进了自定义风格的命名空间", id)
+		}
+	}
+}
+
+func TestIsCustomStyleID(t *testing.T) {
+	for id, want := range map[string]bool{
+		DraftStyleID:         true,
+		"custom-warm-film":   true,
+		"custom-a1":          true,
+		"custom-":            false,
+		"custom":             false,
+		"custom-Warm":        false,
+		"custom-warm--film":  false,
+		"custom-warm/../x":   false,
+		"pixel-arcade-v1":    false,
+		"x-custom-warm-film": false,
+	} {
+		if got := IsCustomStyleID(id); got != want {
+			t.Errorf("IsCustomStyleID(%q) = %v，期望 %v", id, got, want)
+		}
+	}
+}

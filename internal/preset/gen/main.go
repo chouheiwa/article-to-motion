@@ -3,6 +3,7 @@
 //
 //	assets/presets/<画幅>/          只随画幅变化（PROMPT-PRODUCTION.md）
 //	assets/styles/<风格>/<画幅>/    风格 × 画幅（frame.md、风格说明书、示例图）
+//	assets/styles/custom-draft/<画幅>/  自定义风格的草稿骨架（无示例图）
 //
 // 生成器刻意不做 YAML 重序列化：frame.md 的 frontmatter 用了 flow 映射、
 // 保留尾零的浮点写法和人工排定的键序，yaml.Marshal 一律还原不出来，会让
@@ -275,9 +276,20 @@ func selectTargets(id string) ([]preset.Preset, error) {
 	return []preset.Preset{p}, nil
 }
 
+// generatedStyles 是生成器要产出的全部风格：内置风格加自定义草稿骨架。
+//
+// 草稿骨架不在内置风格表里（见 preset.CustomStyle），但它同样随画幅变化、
+// 同样要过 CI 的幂等门，所以由生成器产出，而不是在 am init 时现拼。
+func generatedStyles() []preset.Style {
+	return append(preset.AllStyles(), preset.CustomStyle)
+}
+
 func selectStyles(id string) ([]preset.Style, error) {
 	if id == "" {
-		return preset.AllStyles(), nil
+		return generatedStyles(), nil
+	}
+	if id == preset.CustomStyle.ID {
+		return []preset.Style{preset.CustomStyle}, nil
 	}
 	s, ok := preset.StyleByID(id)
 	if !ok {
@@ -314,7 +326,8 @@ func generate(root string, targets []preset.Preset, styles []preset.Style, examp
 			if err := writeFiles(root, dir, files, out); err != nil {
 				return err
 			}
-			if examples {
+			// 草稿骨架没有示例图：示例图由定风格阶段按用户描述现画。
+			if examples && style.ID != preset.CustomStyle.ID {
 				if err := renderExamples(root, filepath.Join(root, dir), p, style, out); err != nil {
 					return fmt.Errorf("风格 %s × 画幅 %s 的示例图: %w", style.ID, p.ID, err)
 				}

@@ -90,15 +90,25 @@ const FontsDir = "assets/fonts/"
 // StyleFonts 返回所选风格要从字体池带进项目的文件：字体本身与各自的许可证，
 // 键是项目内的相对路径。许可证按文件去重——同一字体族的多个字重共用一份。
 func StyleFonts(style preset.Style) (map[string][]byte, error) {
-	out := make(map[string][]byte, 2*len(style.Fonts))
-	for _, font := range style.Fonts {
+	out, err := FontFiles(style.Fonts)
+	if err != nil {
+		return nil, fmt.Errorf("风格 %s: %w", style.ID, err)
+	}
+	return out, nil
+}
+
+// FontFiles 从字体池取出给定字体及其许可证，键是项目内的相对路径。
+// 自定义风格的 am style add-font 与内置风格的 am init 共用这一份读取逻辑。
+func FontFiles(fonts []preset.Font) (map[string][]byte, error) {
+	out := make(map[string][]byte, 2*len(fonts))
+	for _, font := range fonts {
 		for _, name := range []string{font.File, font.License} {
 			if _, done := out[FontsDir+name]; done {
 				continue
 			}
 			body, err := Files.ReadFile("assets/fontpool/" + name)
 			if err != nil {
-				return nil, fmt.Errorf("风格 %s 声明的字体池文件不存在：%s", style.ID, name)
+				return nil, fmt.Errorf("字体池里没有文件 %s", name)
 			}
 			out[FontsDir+name] = body
 		}

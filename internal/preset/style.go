@@ -1,6 +1,9 @@
 package preset
 
-import "fmt"
+import (
+	"fmt"
+	"regexp"
+)
 
 // Style 是与画幅正交的视觉风格。
 //
@@ -150,4 +153,36 @@ func StyleByIDOrError(id string) (Style, error) {
 		return s, nil
 	}
 	return Style{}, fmt.Errorf("未知风格 %q，可选：%v", id, StyleIDs())
+}
+
+// CustomStyleFlag 是 am init --style 的保留取值：不选内置风格，改由用户描述生成。
+const CustomStyleFlag = "custom"
+
+// DraftStyleID 是自定义风格草稿骨架的 style_id。
+//
+// 草稿骨架字段齐全、能被解析，但还没有按用户描述定稿：validate 见到它就报
+// 「定风格阶段未完成」，scene.Load 见到它就拒绝渲染。定稿时由编排阶段把
+// style_id 改成 custom-<名字>。
+const DraftStyleID = "custom-draft"
+
+// CustomStyle 是自定义风格草稿骨架在源树与生成器里的身份。
+//
+// 它刻意不进 builtinStyles：生成器、init 选择框与一串枚举内置风格的测试都
+// 遍历那张表，混进去会把草稿当成一套带示例图的正式风格。说明书路径固定为
+// CustomStyle.GuideDoc()，定稿后改了 style_name 也不变，validate 不必从
+// 用户写的名字拼路径。
+var CustomStyle = Style{
+	ID:              DraftStyleID,
+	Name:            "自定义",
+	Label:           "自定义：按文字描述生成风格（需在制作前完成定风格阶段）",
+	SheetBackground: "#F5F7FB",
+}
+
+// customStyleID 限定自定义风格 id 的命名空间：小写字母数字，连字符分段。
+// 内置风格一律不以 custom- 开头，两边不会撞名。
+var customStyleID = regexp.MustCompile(`^custom(-[a-z0-9]+)+$`)
+
+// IsCustomStyleID 判断 style_id 是否属于自定义风格（含草稿）。
+func IsCustomStyleID(id string) bool {
+	return customStyleID.MatchString(id)
 }

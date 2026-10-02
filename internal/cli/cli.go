@@ -205,6 +205,8 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 	var skipHyperframes bool
 	var canvasID string
 	var styleID string
+	var styleBrief string
+	var styleBriefFile string
 	var narration string
 	var delivery string
 	initCmd := &cobra.Command{
@@ -222,6 +224,11 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 选择；非交互环境不传则取默认风格 ` + preset.DefaultStyle().ID + `。改风格同样意味着重建项目。
 可选风格：
 ` + styleOptions() + `
+
+--style ` + preset.CustomStyleFlag + ` 不套用内置风格，改由 --style-brief 或 --style-brief-file 给出文字
+描述。init 只写入描述（` + styleBriefPath + `）与一份草稿 frame.md；am run 在制作开始前
+执行定风格阶段，把描述落成 frame.md、说明书与四张示例图。定稿并通过
+am validate style 之前，镜头不会开始渲染。
 
 写入内容：
   PROMPT.md、PROMPT-PRODUCTION.md、article-to-motion.conf、.env.example
@@ -263,6 +270,9 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
   # 指定风格
   am init my-video --canvas vertical-9x16 --style ` + preset.DefaultStyle().ID + `
 
+  # 不套用内置风格，按文字描述定制
+  am init my-video --canvas vertical-9x16 --style ` + preset.CustomStyleFlag + ` --style-brief "暖色胶片质感，手写标注，低饱和"
+
   # 离线或 CI：跳过联网安装 HyperFrames 技能
   am init my-video --canvas vertical-3x4 --skip-hyperframes
 
@@ -295,6 +305,10 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
 			if err != nil {
 				return err
 			}
+			brief, err := resolveStyleBrief(style, styleBrief, styleBriefFile, os.Stdin, stdout)
+			if err != nil {
+				return err
+			}
 			shared, err := assets.Shared()
 			if err != nil {
 				return err
@@ -311,6 +325,9 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
 			if err != nil {
 				return err
 			}
+			if brief != "" {
+				extra[styleBriefPath] = styleBriefDocument(brief)
+			}
 			if delivery == "song" {
 				extra["song.yaml"] = []byte(song.DefaultConfig)
 			}
@@ -324,6 +341,9 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
 				}
 			}
 			fmt.Fprintf(stdout, "项目已初始化：%s（画幅 %s，风格 %s，新增 %d，未变 %d）\n", target, chosen.Label, style.Name, result.Created, result.Unchanged)
+			if style.ID == preset.CustomStyle.ID {
+				fmt.Fprintf(stdout, "自定义风格尚未定稿：am run 会先执行定风格阶段，按 %s 生成风格；定稿前 am validate style 会报未完成，镜头也不会开始渲染\n", styleBriefPath)
+			}
 			if skipHyperframes {
 				fmt.Fprintln(stdout, "警告：已跳过 HyperFrames 技能安装")
 				return nil
@@ -352,7 +372,9 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
 	}
 	initCmd.Flags().BoolVar(&skipHyperframes, "skip-hyperframes", false, "跳过联网安装 HyperFrames 官方技能；不影响随二进制下发的内置技能树")
 	initCmd.Flags().StringVar(&canvasID, "canvas", "", "画幅预设："+strings.Join(preset.IDs(), " | ")+"；不传则在终端里交互选择")
-	initCmd.Flags().StringVar(&styleID, "style", "", "视觉风格："+strings.Join(preset.StyleIDs(), " | ")+"；不传则在终端里交互选择，非交互环境取默认风格")
+	initCmd.Flags().StringVar(&styleID, "style", "", "视觉风格："+strings.Join(append(preset.StyleIDs(), preset.CustomStyleFlag), " | ")+"；不传则在终端里交互选择，非交互环境取默认风格")
+	initCmd.Flags().StringVar(&styleBrief, "style-brief", "", "自定义风格的文字描述，只能与 --style "+preset.CustomStyleFlag+" 一起使用")
+	initCmd.Flags().StringVar(&styleBriefFile, "style-brief-file", "", "从文件读取自定义风格的描述，与 --style-brief 二选一")
 	initCmd.Flags().StringVar(&narration, "narration", narrationSolo,
 		"叙事模式："+narrationSolo+"（单口播，默认） | "+narrationCast+"（多角色对话，额外写出 cast.yaml 与 cast/）")
 	initCmd.Flags().StringVar(&delivery, "delivery", "speech", "讲解形式：speech（默认）或 song（单人整曲）")
@@ -844,7 +866,9 @@ publish.md 必须以安全 YAML frontmatter 提供机器字段，并以固定 Ma
 自动内联一批字体，但其中没有任何简体中文字体，所以中文字形必须由项目自带文件提供。
 
 --regenerate-examples 会重新渲染 assets/style-guide/examples/ 下的示例 PNG，
-这是本命令唯一会写文件的路径。它需要两个外部命令，缺任意一个都会失败：
+这是本命令唯一会写文件的路径，出图在校验之前执行。内置风格以内置 SVG 为模板并
+按项目配色重着色；自定义风格（am init --style custom）直接渲染项目里的四张
+SVG，草稿阶段也可以出图。它需要两个外部命令，缺任意一个都会失败：
   rsvg-convert   来自 librsvg，负责 SVG 转 PNG
   magick         来自 ImageMagick，负责把多张 PNG 拼成概览图
 
@@ -859,25 +883,28 @@ SVG 转 PNG 这一步不能用 ImageMagick 代替：多数 ImageMagick 构建自
 			if rootDir == "" {
 				rootDir = "."
 			}
-			if err := validate.Style(rootDir); err != nil {
-				return err
-			}
+			// 先出图再校验：自定义风格的示例 PNG 要靠这一步生成，先校验的话
+			// 会因为 PNG 还不存在而永远走不到出图。
 			if regenerateExamples {
 				if err := validate.RegenerateExamples(rootDir, stdout); err != nil {
 					return err
 				}
 			}
+			if err := validate.Style(rootDir); err != nil {
+				return err
+			}
 			fmt.Fprintln(stdout, "风格规范校验通过")
 			return nil
 		}}
 	styleCmd.Flags().StringVar(&projectRoot, "project-root", "", "项目根目录，缺省为当前目录")
-	styleCmd.Flags().BoolVar(&regenerateExamples, "regenerate-examples", false, "重新生成通用风格示例 PNG，需要 rsvg-convert（librsvg）与 magick（ImageMagick）两个命令")
+	styleCmd.Flags().BoolVar(&regenerateExamples, "regenerate-examples", false, "先重新生成风格示例 PNG 再校验，需要 rsvg-convert（librsvg）与 magick（ImageMagick）两个命令")
 	validateCmd.AddCommand(styleCmd)
 	validateCmd.AddCommand(newValidateVideoCommand(stdout, &projectRoot))
 	validateCmd.AddCommand(newValidateCastCommand(stdout))
 	validateCmd.AddCommand(newValidateSongCommand(stdout))
 	validateCmd.AddCommand(newValidateReadsCommand(stdout))
 	root.AddCommand(validateCmd)
+	root.AddCommand(newStyleCommand(stdout))
 	root.AddCommand(newConcatCommand(stdout, &projectRoot))
 	root.AddCommand(newReviewCommand(stdout, &projectRoot))
 	root.AddCommand(newAudioCmd(stdout))

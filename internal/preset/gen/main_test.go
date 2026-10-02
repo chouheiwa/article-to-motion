@@ -90,6 +90,28 @@ func TestEveryStyleHasTemplates(t *testing.T) {
 	}
 }
 
+// 自定义风格草稿要为每个画幅生成，且 style_id 必须是草稿身份：validate 与
+// scene.Load 都靠它认出「定风格阶段还没做」。
+func TestCustomDraftRendersForEveryCanvas(t *testing.T) {
+	tpl, err := loadTemplates(preset.CustomStyle.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range preset.All() {
+		files, err := RenderStyle(p, preset.CustomStyle, tpl)
+		if err != nil {
+			t.Fatalf("%s: %v", p.ID, err)
+		}
+		front := frontmatterOf(t, files["frame.md"])
+		if !strings.Contains(front, "style_id: "+preset.DraftStyleID+"\n") {
+			t.Errorf("%s 的草稿 frame.md 缺少草稿 style_id", p.ID)
+		}
+		if _, ok := files[preset.CustomStyle.GuideDoc()]; !ok {
+			t.Errorf("%s 缺少草稿说明书", p.ID)
+		}
+	}
+}
+
 func frontmatterOf(t *testing.T, body []byte) string {
 	t.Helper()
 	parts := strings.SplitN(string(body), "---", 3)
@@ -205,7 +227,7 @@ func outputs() []string {
 	var out []string
 	for _, p := range preset.All() {
 		out = append(out, filepath.Join("presets", p.ID, "PROMPT-PRODUCTION.md"))
-		for _, style := range preset.AllStyles() {
+		for _, style := range generatedStyles() {
 			dir := filepath.Join("styles", style.ID, p.ID)
 			out = append(out, filepath.Join(dir, "frame.md"), filepath.Join(dir, filepath.FromSlash(style.GuideDoc())))
 		}
@@ -216,7 +238,7 @@ func outputs() []string {
 func TestGenerateWritesEveryPresetIntoRoot(t *testing.T) {
 	root := t.TempDir()
 	var log bytes.Buffer
-	if err := generate(root, preset.All(), preset.AllStyles(), false, &log); err != nil {
+	if err := generate(root, preset.All(), generatedStyles(), false, &log); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 	for _, name := range outputs() {
@@ -240,7 +262,7 @@ func TestGenerateWritesEveryPresetIntoRoot(t *testing.T) {
 // generate 的产物必须与仓库里签入的一致——这正是 CI 幂等门要保证的事。
 func TestGenerateMatchesCommittedAssets(t *testing.T) {
 	root := t.TempDir()
-	if err := generate(root, preset.All(), preset.AllStyles(), false, io.Discard); err != nil {
+	if err := generate(root, preset.All(), generatedStyles(), false, io.Discard); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 	for _, name := range outputs() {
@@ -260,8 +282,12 @@ func TestGenerateMatchesCommittedAssets(t *testing.T) {
 
 func TestSelectStyles(t *testing.T) {
 	all, err := selectStyles("")
-	if err != nil || len(all) != len(preset.AllStyles()) {
-		t.Fatalf("空 id 应返回全部：%v %v", len(all), err)
+	if err != nil || len(all) != len(preset.AllStyles())+1 {
+		t.Fatalf("空 id 应返回全部内置风格加自定义草稿：%v %v", len(all), err)
+	}
+	draft, err := selectStyles(preset.DraftStyleID)
+	if err != nil || len(draft) != 1 || draft[0].ID != preset.DraftStyleID {
+		t.Fatalf("应能单独生成自定义草稿：%v %v", draft, err)
 	}
 	if _, err := selectStyles("no-such-style"); err == nil {
 		t.Fatal("未知风格应报错")
@@ -333,5 +359,16 @@ func TestSubstituteCanvasRejectsUnknownPlaceholder(t *testing.T) {
 	got, err := substituteCanvas(p, "{{CONTENT_LEFT_PX+8}}/{{CONTENT_WIDTH_PX-16}}")
 	if err != nil || got != "96/888" {
 		t.Fatalf("偏移计算错误：%q %v", got, err)
+	}
+}
+
+// 自定义风格的草稿只有靠编排提示词里的定风格阶段才会被定稿；这一节被删掉，
+// 项目会卡在 scene.Load 的草稿拦截上，而编排工具不知道该做什么。
+func TestProductionPromptCarriesCustomStyleStage(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{preset.DraftStyleID, "docs/style-brief.md", "am style add-font", "am validate style --regenerate-examples", "mood_refs", "$imagegen", preset.CustomStyle.GuideDoc()} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 的定风格阶段缺少 %q", want)
+		}
 	}
 }

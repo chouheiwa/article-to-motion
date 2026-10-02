@@ -12,6 +12,17 @@
 - 把解析后的渲染器记录在执行日志中。每个镜头用 `am scene run <镜头目录>` 调用，渲染器由 `am` 从配置解析；需要单独指定时写入该镜头 `scene.json` 的 `renderer` 字段。
 - 如果配置的渲染工具不可用，停止并明确报告缺失的 CLI；未经用户确认不得替换渲染器。
 
+## 定风格（仅自定义风格）
+
+根目录 `frame.md` 的 `style_id` 为 `custom-draft` 时，项目用的是按文字描述定制的风格，必须先完成定风格再拆分镜头；`style_id` 是其他值时跳过本节。风格未定稿时 `am scene run` 会直接拒绝渲染。
+
+1. 读 `docs/style-brief.md`，把描述落成配色、字体角色、四种镜头骨架的版式、动效语法与禁用项。
+2. 可选：编排工具提供内置生图能力（例如 Codex 的 `$imagegen`）时，按描述生成一到两张氛围参照图并移进 `assets/style-guide/mood/`；不提供就跳过，不得为此改用需要 API 密钥的方式。参照图只取质感与装饰语言。
+3. 用 `am style fonts` 查看可用字体，`am style add-font <字体族>` 拷进项目；不得引用本机系统字体或临时下载字体。
+4. 改写 `frame.md` 与 `docs/自定义-视频风格说明书.md`，两份 frontmatter 逐项相同：`style_id` 改为 `custom-<小写英文短名>`；`canvas`、`safe_area` 一个数字都不改；`scene_archetypes` 的四个 `id` 与顺序不变；有氛围参照图时用 `mood_refs` 列出路径。
+5. 按 `frame.md` 的画布尺寸为四种骨架各画一张 SVG，存为 `assets/style-guide/examples/<id>.svg`，只用本风格声明的颜色与字体族。
+6. 运行 `am validate style --regenerate-examples`，修正到输出「风格规范校验通过」，再看一遍 `assets/style-guide/examples/contact-sheet.png` 确认字体、配色与骨架差异。
+
 ## 镜头拆分
 
 根据 `transcription.srt` 做粗粒度分镜。一个镜头可以包含单条字幕，也可以合并连续多条字幕；合并依据是文案是否表达同一主题、同一因果关系或同一视觉概念。
@@ -28,6 +39,7 @@
 - `prompt.md`：本镜头的创意方向、视觉概念和表达重点。可以按镜头文案自由改写，交付规格、阶段消息等执行契约由 `am` 保证，不在本文件中。
 - `transcription.srt`：复制完整字幕文件，供渲染工具理解整体上下文。
 - `frame.md`：仓库根目录存在视觉规范文件时必须一并复制，并在 `scene.json` 的 `style_guide` 中声明。声明了但文件不存在会报错。
+- `assets/style-guide/`：视觉规范 `scene_archetypes` 的 `example_png` 示例图，以及声明了 `mood_refs` 时的氛围参照图，按相同相对路径复制进来。
 - `assets/fonts/`：把视觉规范 `typography.font_files` 声明的字体文件按相同相对路径复制进来。渲染机是一台干净的无头 Chrome，不装任何系统字体，中文字形只能由这些自带文件提供；字体栈里没有 `@font-face` 的字体族会静默回退，本地看着正常、成片排版却是错的。
 - 渲染器锁定文件：固定 HyperFrames 版本、禁止升级或改动已装技能、禁止读取 `.env`、禁止改动 `scene.json` 的执行契约。文件名取决于该镜头所用渲染工具会自动读取的项目级指令文件（例如 `claude` 读 `CLAUDE.md`），按所选工具各自的约定命名。
 

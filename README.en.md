@@ -47,6 +47,16 @@ am init my-video --canvas vertical-9x16 --style pixel-arcade-v1
 
 Built-in styles: `clear-system-blueprint-v1` (default, knowledge/tech explainers), `pixel-arcade-v1`, `scifi-hud-v1`, `cyberpunk-glitch-v1`, `candy-casual-v1`, `rebel-graphic-v1`, `fantasy-quest-v1`, `esports-broadcast-v1`, `visual-novel-v1` (game-inspired), plus `neon-data-dark-v1`, `editorial-magazine-v1`, `whiteboard-doodle-v1`. Each writes `frame.md`, a style guide under `docs/`, four layout example images, and copies the fonts it uses (all SIL OFL 1.1, licenses included) into `assets/fonts/`.
 
+#### Custom style
+
+To skip the built-in styles, pass `--style custom` with a written description (`--style-brief "..."` or `--style-brief-file <file>`). `am init` writes only the description (`docs/style-brief.md`) and a draft `frame.md` (`style_id: custom-draft`). Before production starts, `am run` turns the description into `frame.md`, `docs/自定义-视频风格说明书.md` and four example images:
+
+- Fonts must come from `am style fonts` (copy them in with `am style add-font <family>`) or be woff2 files you add yourself with a license. System fonts are not allowed; the render machine has none.
+- If the orchestrator has built-in image generation (for example `$imagegen` in the official Codex CLI signed in with a ChatGPT account), it first generates one or two mood images and lists them under `mood_refs` in `frame.md`. They only inform texture and decoration; palette, fonts and layout still come from the `frame.md` values. With API-key sign-in or third-party providers the tool may be unavailable, and this step is skipped.
+- Example images are drawn as SVG and rendered with `am validate style --regenerate-examples` (needs `rsvg-convert`, `magick` and `fonttools`).
+
+Until the style is finalized and passes `am validate style`, `am scene run` refuses to render. `am validate style` checks structure, fonts and example sizes, not taste: look at `assets/style-guide/examples/contact-sheet.png` after finalizing.
+
 `am init` refuses to overwrite existing files with different content. By default it installs the pinned HyperFrames 0.8.14 skills into the project's `.agents/skills/`, alongside the binary-delivered `text-to-lottie` and `algorithmic-art`; use `--skip-hyperframes` for offline or CI environments.
 
 Skills go into the project rather than `$HOME` because that is the only way projects stop clobbering each other: the upstream installer only honours `homedir`, so a machine has exactly one copy — with two projects pinned to different versions, whichever was initialized last wins. The install never writes to your HOME; the upstream installer runs in a temporary directory outside the project and its output is moved in.

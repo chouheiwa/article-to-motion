@@ -44,6 +44,24 @@ var (
 	FontCaveat600       = Font{"caveat-600.woff2", "Caveat", 600, "LICENSE-caveat.txt"}
 )
 
+// allFonts 是字体池的全集，顺序即 am style fonts 的展示顺序。
+// 自定义风格只能从这里（加上 SharedFonts）挑字体：渲染机没有系统字体，
+// 临时下载的字体既不可复现，许可也说不清。
+var allFonts = []Font{
+	FontNotoSerifSC400, FontNotoSerifSC700, FontLXGWWenKai400, FontXiaolai400,
+	FontSmileySans400, FontZCOOLKuaiLe400, FontZCOOLQingKe400, FontFusionPixel400,
+	FontPressStart2P400, FontSilkscreen400, FontOrbitron, FontChakraPetch700,
+	FontFredoka600, FontFredoka700, FontBungee400, FontCinzel700, FontBebasNeue400,
+	FontOxanium600, FontSpaceGrotesk500, FontSpaceGrotesk700, FontCaveat600,
+}
+
+// AllFonts 返回字体池全集的副本。
+func AllFonts() []Font {
+	out := make([]Font, len(allFonts))
+	copy(out, allFonts)
+	return out
+}
+
 // SharedFonts 是 assets/shared/assets/fonts/ 里随每个项目下发的正文字体，
 // 所有风格都可以直接使用，不需要在 Style.Fonts 里声明。
 var SharedFonts = []Font{

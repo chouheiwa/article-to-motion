@@ -28,12 +28,21 @@ func TestStyleFontsExistWithLicenses(t *testing.T) {
 	}
 }
 
-// 字体池里的每个字体都得有风格在用，否则只是白白撑大二进制。
-func TestFontPoolHasNoOrphans(t *testing.T) {
-	used := map[string]bool{}
-	for _, style := range preset.AllStyles() {
-		for _, font := range style.Fonts {
-			used[font.File], used[font.License] = true, true
+// 字体池与 preset.AllFonts 必须双向一致：池里有而表里没有，am style fonts
+// 列不出来、自定义风格永远用不上，只是白白撑大二进制；表里有而池里没有，
+// am style add-font 会在用户项目里才失败。
+func TestFontPoolMatchesAllFonts(t *testing.T) {
+	listed := map[string]bool{}
+	files, err := FontFiles(preset.AllFonts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, font := range preset.AllFonts() {
+		listed[font.File], listed[font.License] = true, true
+		for _, name := range []string{font.File, font.License} {
+			if _, ok := files[FontsDir+name]; !ok {
+				t.Errorf("AllFonts 声明的 %s 不在字体池里", name)
+			}
 		}
 	}
 	entries, err := fs.ReadDir(Files, "assets/fontpool")
@@ -45,9 +54,16 @@ func TestFontPoolHasNoOrphans(t *testing.T) {
 		if name == "README.md" {
 			continue
 		}
-		if !used[name] {
-			t.Errorf("字体池文件 %s 没有任何风格使用", name)
+		if !listed[name] {
+			t.Errorf("字体池文件 %s 不在 preset.AllFonts 里", name)
 		}
+	}
+}
+
+func TestFontFilesRejectsUnknownFont(t *testing.T) {
+	_, err := FontFiles([]preset.Font{{File: "no-such.woff2", Family: "X", Weight: 400, License: "LICENSE-x.txt"}})
+	if err == nil || !strings.Contains(err.Error(), "no-such.woff2") {
+		t.Fatalf("字体池里没有的字体应报错并点名，实际 %v", err)
 	}
 }
 

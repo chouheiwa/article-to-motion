@@ -62,6 +62,24 @@ am init my-video --canvas vertical-9x16 --style pixel-arcade-v1
 
 每套风格写入 `frame.md`、`docs/<风格名>-视频风格说明书.md` 与四张版式示例图，并把该风格用到的字体（均为 SIL OFL 1.1，许可证随附）拷进 `assets/fonts/`。
 
+#### 自定义风格
+
+不想套用内置风格时，用 `--style custom` 加一段文字描述：
+
+```bash
+am init my-video --canvas vertical-9x16 --style custom --style-brief "暖色胶片质感，低饱和，手写标注"
+# 描述较长时从文件读
+am init my-video --canvas vertical-9x16 --style custom --style-brief-file brief.txt
+```
+
+`am init` 只写入描述（`docs/style-brief.md`）和一份草稿 `frame.md`（`style_id: custom-draft`）。`am run` 在制作开始前执行「定风格」阶段，把描述落成 `frame.md`、`docs/自定义-视频风格说明书.md` 与四张示例图：
+
+- 字体只能从 `am style fonts` 列出的字体里选，用 `am style add-font <字体族>` 拷进项目；也可以自己放入带许可证的 woff2 文件。不能用本机系统字体，渲染机上没有。
+- 编排工具提供内置生图能力时（例如用 ChatGPT 账号登录的官方 Codex 带的 `$imagegen`），会先按描述生成一到两张氛围参照图，记在 `frame.md` 的 `mood_refs` 里。参照图只用来提炼质感与装饰语言，配色、字体、版式仍以 `frame.md` 的数值为准。用 API key 登录或接第三方 provider 时这个工具可能不可用，此时跳过这一步，直接画示例 SVG。
+- 示例图由编排工具画成 SVG，再用 `am validate style --regenerate-examples` 渲染成 PNG（需要 `rsvg-convert`、`magick` 和 `fonttools`）。
+
+定稿并通过 `am validate style` 之前，`am scene run` 会拒绝渲染，避免所有镜头按草稿里的占位 token 渲染完才发现风格不对。`am validate style` 只能检查结构、字体和示例图尺寸，检查不了好不好看：定稿后先看一遍 `assets/style-guide/examples/contact-sheet.png`。
+
 `am init` 不覆盖内容不同的已有文件。默认联网安装固定版本 0.8.14 的 HyperFrames 官方技能到项目的 `.agents/skills/`，与随二进制下发的 `text-to-lottie`、`algorithmic-art` 同处一个目录；安装依赖 `git`，离线或 CI 环境可使用 `--skip-hyperframes`。
 
 技能装进项目而不是 HOME，是因为项目之间互不覆盖只有这样才成立：上游安装器只认 `homedir`，一台机器上只有一份技能，项目 A 与项目 B 固定不同版本时谁后初始化谁说了算。安装全程不写用户 HOME——上游安装器在项目外的临时目录里运行，产物再搬进项目。

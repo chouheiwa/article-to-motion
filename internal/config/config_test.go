@@ -59,6 +59,20 @@ func TestSafeChildEnvironmentKeepsIdentityVariables(t *testing.T) {
 	}
 }
 
+// CODEX_HOME 是 Codex 的数据目录：用户改过它时，缺了这个变量 Codex 读不到
+// 登录态，内置生图的产物也落到别处，定风格阶段拿不到氛围参照图。
+func TestSafeChildEnvironmentKeepsCodexHome(t *testing.T) {
+	cfg := Config{Orchestrator: "codex", Renderer: "codex", TTSProvider: "minimax"}
+	base := map[string]string{"PATH": "/bin", "CODEX_HOME": "/data/codex", "OPENAI_API_KEY": "secret"}
+	env := cfg.ChildEnvironment(base, false, nil)
+	if env["CODEX_HOME"] != "/data/codex" {
+		t.Fatalf("CODEX_HOME 应被透传，实际 %q", env["CODEX_HOME"])
+	}
+	if _, leaked := env["OPENAI_API_KEY"]; leaked {
+		t.Fatal("凭据仍不得透传")
+	}
+}
+
 func TestDotEnvRejectsSecrets(t *testing.T) {
 	root := t.TempDir()
 	os.WriteFile(filepath.Join(root, "article-to-motion.conf"), []byte("ORCHESTRATOR=codex\nRENDERER=claude\n"), 0o644)

@@ -39,3 +39,16 @@ func TestPresetAndStyleRejectUnknownIDs(t *testing.T) {
 		t.Error("未知画幅下的风格应报错")
 	}
 }
+
+// 自定义风格的草稿骨架要随每个画幅下发：am init --style custom 直接取这棵树。
+func TestCustomDraftTreeResolvesForEveryCanvas(t *testing.T) {
+	for _, canvas := range preset.All() {
+		tree, err := Style(preset.CustomStyle.ID, canvas.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fs.Stat(tree, preset.CustomStyle.GuideDoc()); err != nil {
+			t.Errorf("%s 缺少草稿说明书", canvas.ID)
+		}
+	}
+}

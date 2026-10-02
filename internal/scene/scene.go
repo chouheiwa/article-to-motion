@@ -220,6 +220,9 @@ func Load(directory string) (Scene, error) {
 		if stat, err := os.Stat(style); err != nil || !stat.Mode().IsRegular() {
 			return Scene{}, fmt.Errorf("style_guide 指向的文件不存在：%s", result.StyleGuide)
 		}
+		if err := rejectDraftStyle(result.Directory, result.StyleGuide); err != nil {
+			return Scene{}, err
+		}
 	}
 	if result.Renderer != "" && !tools.ValidTools[result.Renderer] {
 		return Scene{}, fmt.Errorf("无效的 renderer：%s", result.Renderer)
@@ -357,10 +360,63 @@ func (c Canvas) Label() string {
 // defaultCanvas 是没有视觉规范时的画幅，与本项目引入画幅预设之前的行为一致。
 var defaultCanvas = Canvas{WidthPx: 1080, HeightPx: 1440, FPS: 30}
 
-// CanvasOf 从镜头目录里的视觉规范文件读出画布规格。
+// draftStyleID 是自定义风格草稿的 style_id，与 preset.DraftStyleID 相同。
+// 本包刻意不依赖 internal/preset，只能抄一份，由测试钉住两边一致。
+const draftStyleID = "custom-draft"
+
+// styleTokens 是镜头层要从视觉规范里读的那几项。
+type styleTokens struct {
+	StyleID string `yaml:"style_id"`
+	Canvas  struct {
+		WidthPx  int `yaml:"width_px"`
+		HeightPx int `yaml:"height_px"`
+		FPS      int `yaml:"fps"`
+	} `yaml:"canvas"`
+	// MoodRefs 只用来判断有没有氛围参照图，元素类型交给 am validate style 去报：
+	// 写成 []string 的话，一个写错的条目会让整份 frontmatter 解析失败，
+	// 连画幅都读不出来，报错里还看不出问题在 mood_refs。
+	MoodRefs []any `yaml:"mood_refs"`
+}
+
+// readStyleTokens 解析镜头目录里视觉规范文件的 frontmatter。
 //
 // 这里刻意不依赖 internal/preset：镜头目录可以脱离项目独立运行
 // （am scene run <目录>），能拿到的只有目录内的文件。
+func readStyleTokens(directory, styleGuide string) (styleTokens, error) {
+	path, err := contained(directory, styleGuide, "style_guide")
+	if err != nil {
+		return styleTokens{}, err
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return styleTokens{}, fmt.Errorf("读取视觉规范失败：%w", err)
+	}
+	parts := strings.SplitN(string(body), "---", 3)
+	if len(parts) != 3 {
+		return styleTokens{}, fmt.Errorf("视觉规范 %s 缺少 YAML frontmatter，无法确定画幅", styleGuide)
+	}
+	var parsed styleTokens
+	if err := yaml.Unmarshal([]byte(parts[1]), &parsed); err != nil {
+		return styleTokens{}, fmt.Errorf("视觉规范 %s 的 frontmatter 解析失败：%w", styleGuide, err)
+	}
+	return parsed, nil
+}
+
+// rejectDraftStyle 拦下尚未定稿的自定义风格。
+//
+// 草稿 frame.md 字段齐全，却只是默认风格的占位 token：放行的话所有镜头会按
+// 占位风格并发渲染完，成片才发现风格全错。读不出 frontmatter 时不在这里报，
+// 交给 CanvasOf 给出更具体的错误。
+func rejectDraftStyle(directory, styleGuide string) error {
+	tokens, err := readStyleTokens(directory, styleGuide)
+	if err != nil || tokens.StyleID != draftStyleID {
+		return nil
+	}
+	return fmt.Errorf("视觉规范 %s 仍是自定义风格草稿（style_id: %s）：定风格阶段未完成，"+
+		"先在项目根完成定风格并通过 am validate style，再把 frame.md 复制进镜头目录", styleGuide, draftStyleID)
+}
+
+// CanvasOf 从镜头目录里的视觉规范文件读出画布规格。
 //
 // 声明了 style_guide 却读不出 canvas 时报错而不是回退默认：静默按 1080x1440
 // 渲染正是这次改造要消除的故障——校验层和执行层各说各的，成片才暴露。
@@ -368,29 +424,11 @@ func CanvasOf(directory, styleGuide string) (Canvas, error) {
 	if styleGuide == "" {
 		return defaultCanvas, nil
 	}
-	path, err := contained(directory, styleGuide, "style_guide")
+	tokens, err := readStyleTokens(directory, styleGuide)
 	if err != nil {
 		return Canvas{}, err
 	}
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return Canvas{}, fmt.Errorf("读取视觉规范失败：%w", err)
-	}
-	parts := strings.SplitN(string(body), "---", 3)
-	if len(parts) != 3 {
-		return Canvas{}, fmt.Errorf("视觉规范 %s 缺少 YAML frontmatter，无法确定画幅", styleGuide)
-	}
-	var parsed struct {
-		Canvas struct {
-			WidthPx  int `yaml:"width_px"`
-			HeightPx int `yaml:"height_px"`
-			FPS      int `yaml:"fps"`
-		} `yaml:"canvas"`
-	}
-	if err := yaml.Unmarshal([]byte(parts[1]), &parsed); err != nil {
-		return Canvas{}, fmt.Errorf("视觉规范 %s 的 frontmatter 解析失败：%w", styleGuide, err)
-	}
-	c := parsed.Canvas
+	c := tokens.Canvas
 	if c.WidthPx <= 0 || c.HeightPx <= 0 || c.FPS <= 0 {
 		return Canvas{}, fmt.Errorf("视觉规范 %s 的 canvas 缺少 width_px / height_px / fps", styleGuide)
 	}
@@ -540,6 +578,17 @@ func BuildPrompt(s Scene, resolvedSkills map[string]string) (string, error) {
 			"版式参照：" + s.StyleGuide + " 的 scene_archetypes 里每种骨架都带 example_png 示例图。" +
 			"动手设计前先打开与本镜头最接近的一两张（路径相对镜头目录；缺失时跳过），" +
 			"参照其构图密度、层次和留白，不照抄其中的文字与数据。\n"
+		tokens, err := readStyleTokens(s.Directory, s.StyleGuide)
+		if err != nil {
+			return "", err
+		}
+		// 氛围参照图多半是生图工具画的：配色与字形都不受 frame.md 约束，
+		// 不把优先级说死，渲染器会照着图抄颜色和字体。
+		if len(tokens.MoodRefs) > 0 {
+			style += "氛围参照：" + s.StyleGuide + " 的 mood_refs 列出了氛围参照图（路径相对镜头目录；缺失时跳过）。" +
+				"只从中取质感、光影与装饰语言；配色、字体、版式与安全区一律以 " + s.StyleGuide + " 的数值为准，" +
+				"图里的文字与字形不得照搬。\n"
+		}
 	}
 	prompt := fmt.Sprintf(`当前只执行一个 MG 动画镜头，不进行交互提问。
 

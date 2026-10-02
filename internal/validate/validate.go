@@ -152,7 +152,7 @@ func Style(projectRoot string) error {
 	}
 	// 说明书文件名随风格而定，从 frame.md 的 style_id 反查，不写死某一套风格。
 	styleID, _ := frame["style_id"].(string)
-	style, err := preset.StyleByIDOrError(styleID)
+	style, err := styleOf(styleID)
 	if err != nil {
 		return fmt.Errorf("frame.md: %w", err)
 	}
@@ -180,6 +180,9 @@ func Style(projectRoot string) error {
 			return fmt.Errorf("typography.font_files[%d] 声明的字体文件不存在：%s", index, path)
 		}
 	}
+	if err := validateMoodRefs(projectRoot, frame["mood_refs"]); err != nil {
+		return fmt.Errorf("frame.md: %w", err)
+	}
 	for _, item := range frame["scene_archetypes"].([]any) {
 		entry := item.(map[string]any)
 		path := entry["example_png"].(string)
@@ -193,6 +196,57 @@ func Style(projectRoot string) error {
 		if int(width) != active.Canvas.WidthPx || int(height) != active.Canvas.HeightPx {
 			return fmt.Errorf("风格示例必须为 %dx%d，实际 %dx%d：%s",
 				active.Canvas.WidthPx, active.Canvas.HeightPx, width, height, path)
+		}
+	}
+	return nil
+}
+
+// styleOf 从 frame.md 的 style_id 找出风格身份。
+//
+// 内置风格查表。自定义风格（custom-*）统一返回 preset.CustomStyle：它的说明书
+// 路径固定，不从用户写的 style_name 拼，名字里出现什么字符都不影响找文件。
+// 草稿单独拦下并说清还差哪一步——否则用户看到的是示例图缺失之类的连带错误。
+func styleOf(id string) (preset.Style, error) {
+	if id == preset.DraftStyleID {
+		return preset.Style{}, fmt.Errorf("自定义风格尚未定稿（style_id 仍为 %s），定风格阶段未完成："+
+			"按 docs/style-brief.md 的描述改写 frame.md 与 %s、画好四张示例图后再校验", id, preset.CustomStyle.GuideDoc())
+	}
+	if preset.IsCustomStyleID(id) {
+		return preset.CustomStyle, nil
+	}
+	return preset.StyleByIDOrError(id)
+}
+
+// moodRefExtensions 是氛围参照图允许的格式：生图工具的产物多为 PNG，
+// 也可能是用户自己放进来的照片。
+var moodRefExtensions = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".webp": true}
+
+// validateMoodRefs 校验可选的氛围参照图。
+//
+// 不查尺寸：生图工具不能指定像素尺寸，参照图也只取质感与装饰语言，不当版式
+// 基准用——版式基准是 scene_archetypes 的示例图，那边才严格要求画布尺寸。
+func validateMoodRefs(projectRoot string, value any) error {
+	if value == nil {
+		return nil
+	}
+	refs, ok := value.([]any)
+	if !ok {
+		return fmt.Errorf("mood_refs 必须是路径数组")
+	}
+	for index, item := range refs {
+		path, ok := item.(string)
+		if !ok || path == "" {
+			return fmt.Errorf("mood_refs[%d] 必须是非空字符串", index)
+		}
+		if err := safeRelative(projectRoot, path); err != nil {
+			return fmt.Errorf("mood_refs[%d]: %w", index, err)
+		}
+		if !moodRefExtensions[strings.ToLower(filepath.Ext(path))] {
+			return fmt.Errorf("mood_refs[%d] 必须是 PNG / JPEG / WebP 图片：%s", index, path)
+		}
+		info, err := os.Stat(filepath.Join(projectRoot, filepath.FromSlash(path)))
+		if err != nil || !info.Mode().IsRegular() {
+			return fmt.Errorf("mood_refs[%d] 声明的参照图不存在：%s", index, path)
 		}
 	}
 	return nil
@@ -549,6 +603,9 @@ var hexColor = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 // 项目改过配色时，示例图要跟着换色：以内置 frame.md 的配色为基准，把 SVG 里
 // 每个基准色替换成项目 frame.md 同名 token 的值。基准取自项目所用风格自己的
 // 内置 frame.md，而不是写死某一套风格的色板。
+//
+// 自定义风格没有内置模板，示例 SVG 是定风格阶段画进项目的：直接渲染项目里的
+// SVG，不改写、不重着色。草稿也放行，画示例图本来就在定稿之前。
 func RegenerateExamples(projectRoot string, output io.Writer) error {
 	frame, _, err := frontmatter(filepath.Join(projectRoot, "frame.md"))
 	if err != nil {
@@ -558,17 +615,42 @@ func RegenerateExamples(projectRoot string, output io.Writer) error {
 	if !ok {
 		return fmt.Errorf("frame.md 的 colors 必须是对象")
 	}
+	active, err := frameCanvas(frame)
+	if err != nil {
+		return err
+	}
 	styleID, _ := frame["style_id"].(string)
+	if preset.IsCustomStyleID(styleID) {
+		return regenerateCustomExamples(projectRoot, active, colors, output)
+	}
 	style, err := preset.StyleByIDOrError(styleID)
 	if err != nil {
 		return fmt.Errorf("frame.md: %w", err)
 	}
-	// 示例图模板按画幅分目录，必须从项目自己的 canvas 反查，不能取默认预设：
-	// 拿 3:4 的模板铺进 9:16 项目，Style 会立刻拒绝，但用户看到的是尺寸报错而
-	// 不是「模板取错了」。
+	templateDir := "assets/styles/" + style.ID + "/" + active.ID
+	recolor, err := recolorMap(templateDir+"/frame.md", colors)
+	if err != nil {
+		return err
+	}
+	source := func(name string) (string, error) {
+		body, readErr := assets.Files.ReadFile(templateDir + "/assets/style-guide/examples/" + name + ".svg")
+		if readErr != nil {
+			return "", fmt.Errorf("读取内置示例 %s: %w", name, readErr)
+		}
+		return recolor.Replace(string(body)), nil
+	}
+	return renderExamples(projectRoot, active, source, recolor.Replace(style.SheetBackground), output)
+}
+
+// frameCanvas 从项目 frame.md 的 canvas 反查画幅预设。
+//
+// 示例图模板按画幅分目录，必须从项目自己的 canvas 反查，不能取默认预设：
+// 拿 3:4 的模板铺进 9:16 项目，Style 会立刻拒绝，但用户看到的是尺寸报错而
+// 不是「模板取错了」。
+func frameCanvas(frame map[string]any) (preset.Preset, error) {
 	canvas, ok := frame["canvas"].(map[string]any)
 	if !ok {
-		return fmt.Errorf("frame.md 的 canvas 必须是对象")
+		return preset.Preset{}, fmt.Errorf("frame.md 的 canvas 必须是对象")
 	}
 	width, _ := canvas["width_px"].(int)
 	height, _ := canvas["height_px"].(int)
@@ -576,13 +658,38 @@ func RegenerateExamples(projectRoot string, output io.Writer) error {
 	orientation, _ := canvas["orientation"].(string)
 	active, ok := preset.ByCanvas(width, height, fps, orientation)
 	if !ok {
-		return fmt.Errorf("frame.md 的画幅 %dx%d 不是内置画幅，无法定位示例模板", width, height)
+		return preset.Preset{}, fmt.Errorf("frame.md 的画幅 %dx%d 不是内置画幅，无法定位示例模板", width, height)
 	}
-	templateDir := "assets/styles/" + style.ID + "/" + active.ID
-	recolor, err := recolorMap(templateDir+"/frame.md", colors)
-	if err != nil {
-		return err
+	return active, nil
+}
+
+// regenerateCustomExamples 渲染自定义风格画进项目的示例 SVG。
+// 缺的 SVG 一次列全，免得「补一张、重跑、再发现下一张」。
+func regenerateCustomExamples(projectRoot string, active preset.Preset, colors map[string]any, output io.Writer) error {
+	dir := filepath.Join(projectRoot, "assets", "style-guide", "examples")
+	var missing []string
+	for _, name := range preset.ArchetypeIDs {
+		if info, err := os.Stat(filepath.Join(dir, name+".svg")); err != nil || !info.Mode().IsRegular() {
+			missing = append(missing, "assets/style-guide/examples/"+name+".svg")
+		}
 	}
+	if len(missing) > 0 {
+		return fmt.Errorf("自定义风格的示例图要先画成 SVG，缺少：%s", strings.Join(missing, "、"))
+	}
+	source := func(name string) (string, error) {
+		body, err := os.ReadFile(filepath.Join(dir, name+".svg"))
+		return string(body), err
+	}
+	background := preset.CustomStyle.SheetBackground
+	if value, ok := colors["canvas"].(string); ok && hexColor.MatchString(value) {
+		background = value
+	}
+	return renderExamples(projectRoot, active, source, background, output)
+}
+
+// renderExamples 把四种骨架的 SVG 写进项目并渲染成 PNG，再拼 contact sheet。
+// source 返回的内容与项目里已有的 SVG 相同时不重写，项目自带的 SVG 保持原样。
+func renderExamples(projectRoot string, active preset.Preset, source func(string) (string, error), background string, output io.Writer) error {
 	outputDir := filepath.Join(projectRoot, "assets", "style-guide", "examples")
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return err
@@ -598,16 +705,16 @@ func RegenerateExamples(projectRoot string, output io.Writer) error {
 	defer cleanup()
 	pngPaths := make([]string, 0, len(preset.ArchetypeIDs))
 	for _, name := range preset.ArchetypeIDs {
-		sourcePath := templateDir + "/assets/style-guide/examples/" + name + ".svg"
-		source, readErr := assets.Files.ReadFile(sourcePath)
-		if readErr != nil {
-			return fmt.Errorf("读取内置示例 %s: %w", name, readErr)
+		svg, err := source(name)
+		if err != nil {
+			return err
 		}
-		svg := recolor.Replace(string(source))
 		svgPath := filepath.Join(outputDir, name+".svg")
 		pngPath := filepath.Join(outputDir, name+".png")
-		if err := os.WriteFile(svgPath, []byte(svg), 0o644); err != nil {
-			return err
+		if existing, readErr := os.ReadFile(svgPath); readErr != nil || string(existing) != svg {
+			if err := os.WriteFile(svgPath, []byte(svg), 0o644); err != nil {
+				return err
+			}
 		}
 		if err := styleimage.RenderSVG(svgPath, pngPath, fontDir); err != nil {
 			return err
@@ -618,7 +725,7 @@ func RegenerateExamples(projectRoot string, output io.Writer) error {
 	contactPath := filepath.Join(outputDir, "contact-sheet.png")
 	const thumbnailWidthPx = 405
 	thumb := fmt.Sprintf("%dx%d", thumbnailWidthPx, thumbnailWidthPx*active.Canvas.HeightPx/active.Canvas.WidthPx)
-	if err := styleimage.ContactSheet(pngPaths, contactPath, thumb, recolor.Replace(style.SheetBackground), "4x1"); err != nil {
+	if err := styleimage.ContactSheet(pngPaths, contactPath, thumb, background, "4x1"); err != nil {
 		return err
 	}
 	fmt.Fprintf(output, "generated %s\n", filepath.ToSlash(filepath.Join("assets", "style-guide", "examples", "contact-sheet.png")))
