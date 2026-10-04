@@ -301,3 +301,33 @@ up; only the final fraction of a frame is padded with silence. No audio stretchi
 extra BGM or speech ducking is applied. Changed song dependencies reject stale cues;
 regenerate cues and explicitly rerender with `--force`. CI uses mock services;
 real audio and visual quality require separate acceptance evidence.
+
+## Optional: beat-synced reels without narration (in progress)
+
+On-screen text, no voice-over, every cut on a musical downbeat. The beat grid and
+bar-based scene timing are done; renderer guidance, whole-film cut review, AI-generated
+instrumentals and code-synthesised scores come in later phases.
+
+```bash
+am init my-reel --canvas vertical-9x16 --delivery beat    # existing project: am beat init
+python3 -m venv "$HOME/.venvs/am-beat"
+"$HOME/.venvs/am-beat/bin/pip" install 'beat-this==1.1.0'  # point beat.yaml's python here
+am beat doctor                       # downloads model weights on first run
+am beat import track.mp3
+am beat analyze                      # draft grid + click track production/beat/grid-click.wav
+am beat regrid --meter 4 --anchor 1  # only if downbeats are shifted when you listen
+am beat confirm                      # after listening: every accent click starts a bar
+am beat bars                         # list bars, then write production/beat/plan.json
+am beat cues scenes/                 # writes whole-frame durations and the beat block
+am validate beat
+```
+
+`plan.json` describes scenes in bars only, e.g. `{"schema":1,"scenes":[{"id":"scene-001","bars":2}]}`;
+the bars must add up to the grid. A pickup before the first downbeat joins the first scene and the
+last bar runs to the end of the music. Cut frames come from one formula (downbeat seconds × fps,
+rounded); durations written by `am beat cues` must not be edited by hand, and `am validate beat`
+plus the pre-render check reject them if they are.
+
+Analysis uses [beat-this](https://github.com/CPJKU/beat_this) (ISMIR 2024, MIT code and weights),
+which reports beats and downbeats on CPU without madmom. Draft grids never take effect directly:
+the model can shift downbeats or misjudge the meter, so listen to the click track before `confirm`.

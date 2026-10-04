@@ -364,3 +364,32 @@ librosa 缺失或分析失败会明确降级为歌词驱动，不制造节拍。
 
 普通测试使用模拟服务，不产生付费调用。真实服务样片需独立验收，不能以
 自动化测试代替歌曲内容、对齐误差或视觉质量验收。
+
+## 可选：无配音卡点（开发中）
+
+画面上有文字、没有配音，镜头切点全部落在音乐重拍上。目前已完成节拍网格与按小节切镜头；
+渲染提示词、整片切点复查与 AI 生成纯音乐、代码合成配乐还在后续阶段。
+
+```bash
+am init my-reel --canvas vertical-9x16 --delivery beat    # 已有项目用 am beat init
+# 在独立环境安装固定版本的节拍分析，并把 beat.yaml 的 python 指向它
+python3 -m venv "$HOME/.venvs/am-beat"
+"$HOME/.venvs/am-beat/bin/pip" install 'beat-this==1.1.0'
+am beat doctor                       # 首次运行下载模型权重
+am beat import track.mp3             # 授权来源记进素材账本
+am beat analyze                      # 草稿网格 + 试听轨 production/beat/grid-click.wav
+am beat regrid --meter 4 --anchor 1  # 试听发现重拍整体错位时才需要
+am beat confirm                      # 听过试听轨、确认重拍都在小节开头后执行
+am beat bars                         # 查每个小节的起止，按小节写 production/beat/plan.json
+am beat cues scenes/                 # 写入各镜头的整数帧时长与 beat 块
+am validate beat
+```
+
+`plan.json` 只用小节数描述镜头，例如 `{"schema":1,"scenes":[{"id":"scene-001","bars":2}]}`，
+小节合计必须等于网格小节数；第一个重拍之前的弱起并进第一个镜头，最后一小节延伸到音乐结束。
+切点帧号只由「重拍秒数 × fps 四舍五入」一个公式算出，`am beat cues` 写入的镜头时长不要手改，
+改了会被 `am validate beat` 与渲染前的检查拦下。
+
+节拍分析用 [beat-this](https://github.com/CPJKU/beat_this)（ISMIR 2024，代码与权重均为 MIT），
+同时给出普通拍与重拍，CPU 可跑；不依赖 madmom。草稿网格从不直接生效：模型可能把重拍整体错位
+或判错拍号，必须听过试听轨再 `confirm`。

@@ -148,6 +148,23 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 
 `mediaprobe` / `concat` 的集成测试需要真实 ffmpeg，缺失时自行跳过。CI 装了 ffmpeg——不装的话测试仍然"通过"但覆盖率掉到门禁线以下，真正跑外部命令的代码再没被验证过。
 
+## 卡点模式
+
+`internal/beat` 是无配音卡点的时间契约，以项目根 `beat.yaml` 启用，与 `song.yaml`、`cast.yaml` 互斥。链路是「导入音乐 → 分析出草稿网格 → 试听确认 → 按小节的分镜计划 → `am beat cues` 写镜头时长」。
+
+| 约定 | 原因 |
+|---|---|
+| 切点帧号只由 `beat.FrameOf`（秒 × fps 四舍五入）算出，总帧数只由 `beat.TotalFrames` 算出 | 两处取整方式不同，画面与音乐会慢慢错开，而且是那种看半天说不出哪里不对的错开 |
+| 分镜计划 `plan.json` 只接受小节数，不接受秒数 | 能写秒数就能写出不在重拍上的切点；切点卡在重拍上要由结构保证，不靠事后对轴 |
+| `am beat cues` 写 `duration_seconds`，`beat.VerifyCue` 对切点做**精确**比对 | 帧号只有一个来源，任何偏差都是有人手改了时长；成片里的 ±1 帧容差属于整片复查，不属于这里 |
+| 草稿网格永远不直接生效，只有 `beat.Confirm` 能把 `reviewed` 置为 true | 模型最常见的错是重拍整体错位或拍号判错，只有听过试听轨才知道 |
+| 分析脚本把结果写进文件，不打印到 stdout | 首次运行下载模型权重，进度输出会污染标准输出，按 stdout 解析时结果直接丢失（实测过） |
+| 音乐由 ffmpeg 解码成单声道 WAV，脚本用标准库 `wave` 读，再调 `Audio2Beats` | 不走 beat-this 自带的 torchaudio 读文件：它的后端随版本变化，能不能读 MP3 取决于用户机器 |
+
+节拍分析固定 `beat-this` `AnalyzerVersion`（代码与权重 MIT），不用 librosa（没有重拍）和 madmom（Python 3.12+ 兼容问题，DBN 后处理有专利、限非商用）。CI 不装 torch，真实分析的集成测试只在设置 `AM_TEST_BEAT_PYTHON` 时运行，改动分析脚本后要在本机跑一遍。
+
+镜头的 `beat` 块与 `song` 块并列，`scene.VerifyBeatInputs` 在渲染前、复用已有产物前与 `run-all` 里都会执行；启用了卡点却没有 `beat` 块的镜头直接拒绝。
+
 ## 公开树边界
 
 `TestPublicTreeContainsNoPrivateOrLegacyContent` 扫描 `git ls-files --cached --others --exclude-standard`，命中即失败。禁止出现的路径包括 `transcription.srt`、`final.mp4`、`publish.md`、`scenes/`、`production/`、`auto-test/`、`article_to_motion/`、`pyproject.toml`、`am`。

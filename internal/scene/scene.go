@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/chouheiwa/articale-to-motion/internal/beat"
 	"github.com/chouheiwa/articale-to-motion/internal/cast"
 	"github.com/chouheiwa/articale-to-motion/internal/song"
 	"github.com/chouheiwa/articale-to-motion/internal/tools"
@@ -49,7 +50,7 @@ var (
 // 都从这里派生，不再各写一份、彼此漂移。改字段集时只改这两个切片。
 var (
 	requiredSceneFields = []string{"id", "duration_seconds", "output", "transcript", "text"}
-	optionalSceneFields = []string{"style_guide", "renderer", "cast", "song"}
+	optionalSceneFields = []string{"style_guide", "renderer", "cast", "song", "beat"}
 )
 
 // RequiredFields 返回 scene.json 的必填字段名（副本，调用方可自由修改）。
@@ -81,6 +82,8 @@ type Scene struct {
 	// Cast 是可选的角色配置。老镜头没有这个字段，Cast 为 nil，行为完全不变。
 	Cast *Cast     `json:"cast,omitempty"`
 	Song *song.Cue `json:"song,omitempty"`
+	// Beat 是卡点镜头绑定的节拍网格区间，由 am beat cues 写入。
+	Beat *beat.Cue `json:"beat,omitempty"`
 	// RetryNote 是调度器在重试前填入的上一次失败说明，不来自 scene.json。
 	// 同一提示词重跑大概率重蹈覆辙，把失败原因和归档日志位置交给渲染器，
 	// 它才有机会换一种做法。
@@ -575,6 +578,9 @@ func BuildPrompt(s Scene, resolvedSkills map[string]string) (string, error) {
 	if err := VerifySongInputs(s); err != nil {
 		return "", err
 	}
+	if err := VerifyBeatInputs(s); err != nil {
+		return "", err
+	}
 	if err := VerifyFrameAlignment(s); err != nil {
 		return "", err
 	}
@@ -745,4 +751,38 @@ func VerifySongInputs(s Scene) error {
 		dir = parent
 	}
 	return nil
+}
+
+// VerifyBeatInputs 核对卡点镜头的 beat 块；渲染前与复用已有产物前都要过一遍。
+//
+// 项目启用了卡点模式（向上找到 beat.yaml）却没有 beat 块的镜头直接拒绝：
+// 没有 cue 的镜头时长不受网格约束，切点卡没卡上全凭运气。
+func VerifyBeatInputs(s Scene) error {
+	if s.Beat != nil {
+		if s.Song != nil || s.Cast != nil {
+			return &VerificationError{Output: s.Output, Problems: []string{"卡点镜头不能同时带 song 或 cast 块"}}
+		}
+		canvas, err := CanvasOf(s.Directory, s.StyleGuide)
+		if err != nil {
+			return &VerificationError{Output: s.Output, Problems: []string{err.Error()}}
+		}
+		if s.Beat.FPS != canvas.FPS {
+			return &VerificationError{Output: s.Output, Problems: []string{"卡点镜头帧率与画幅不符，请重新 am beat cues"}}
+		}
+		if err := beat.VerifyCue(s.Directory, s.ID, *s.Beat, s.DurationSeconds); err != nil {
+			return &VerificationError{Output: s.Output, Problems: []string{err.Error()}}
+		}
+		return nil
+	}
+	dir, _ := filepath.Abs(s.Directory)
+	for {
+		if beat.Enabled(dir) {
+			return &VerificationError{Output: s.Output, Problems: []string{"卡点镜头缺少 beat 块，请运行 am beat cues"}}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return nil
+		}
+		dir = parent
+	}
 }

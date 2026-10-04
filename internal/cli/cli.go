@@ -19,6 +19,7 @@ import (
 
 	assets "github.com/chouheiwa/articale-to-motion"
 	"github.com/chouheiwa/articale-to-motion/internal/archive"
+	"github.com/chouheiwa/articale-to-motion/internal/beat"
 	"github.com/chouheiwa/articale-to-motion/internal/cast"
 	"github.com/chouheiwa/articale-to-motion/internal/config"
 	"github.com/chouheiwa/articale-to-motion/internal/envutil"
@@ -291,8 +292,11 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
 				target = args[0]
 			}
 			target, _ = filepath.Abs(target)
-			if delivery != "speech" && delivery != "song" {
-				return fmt.Errorf("--delivery 必须为 speech 或 song")
+			if delivery != "speech" && delivery != "song" && delivery != "beat" {
+				return fmt.Errorf("--delivery 必须为 speech、song 或 beat")
+			}
+			if delivery == "beat" && (narration == narrationCast || cast.HasRoster(target) || song.Enabled(target)) {
+				return fmt.Errorf("卡点模式不能与歌曲讲解或多角色对话同时启用")
 			}
 			if (delivery == "song" && (narration == narrationCast || cast.HasRoster(target))) || (narration == narrationCast && song.Enabled(target)) {
 				return fmt.Errorf("首版不支持 song + cast")
@@ -330,6 +334,9 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
 			}
 			if delivery == "song" {
 				extra["song.yaml"] = []byte(song.DefaultConfig)
+			}
+			if delivery == "beat" {
+				extra[beat.ConfigFile] = []byte(beat.DefaultConfig)
 			}
 			result, err := project.InitializeWithFiles(target, extra, shared, presetFiles, styleFiles)
 			if err != nil {
@@ -377,7 +384,7 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
 	initCmd.Flags().StringVar(&styleBriefFile, "style-brief-file", "", "从文件读取自定义风格的描述，与 --style-brief 二选一")
 	initCmd.Flags().StringVar(&narration, "narration", narrationSolo,
 		"叙事模式："+narrationSolo+"（单口播，默认） | "+narrationCast+"（多角色对话，额外写出 cast.yaml 与 cast/）")
-	initCmd.Flags().StringVar(&delivery, "delivery", "speech", "讲解形式：speech（默认）或 song（单人整曲）")
+	initCmd.Flags().StringVar(&delivery, "delivery", "speech", "讲解形式：speech（默认）、song（单人整曲）或 beat（无配音卡点）")
 	root.AddCommand(initCmd)
 
 	configCmd := &cobra.Command{
@@ -600,6 +607,14 @@ AI CLI 调用。这类失败要先改提示词或时长声明再重跑。
 					return fmt.Errorf("歌曲镜头必须提供 --song-timeline production/song/timeline.json")
 				}
 				if err := scene.VerifySongInputs(s); err != nil {
+					return err
+				}
+				if err := scene.VerifyBeatInputs(s); err != nil {
+					return err
+				}
+			}
+			if beat.Enabled(".") {
+				if err := beatCoverage(".", scenes); err != nil {
 					return err
 				}
 			}
@@ -902,6 +917,7 @@ SVG 转 PNG 这一步不能用 ImageMagick 代替：多数 ImageMagick 构建自
 	validateCmd.AddCommand(newValidateVideoCommand(stdout, &projectRoot))
 	validateCmd.AddCommand(newValidateCastCommand(stdout))
 	validateCmd.AddCommand(newValidateSongCommand(stdout))
+	validateCmd.AddCommand(newValidateBeatCommand(stdout))
 	validateCmd.AddCommand(newValidateReadsCommand(stdout))
 	root.AddCommand(validateCmd)
 	root.AddCommand(newStyleCommand(stdout))
@@ -909,6 +925,7 @@ SVG 转 PNG 这一步不能用 ImageMagick 代替：多数 ImageMagick 构建自
 	root.AddCommand(newReviewCommand(stdout, &projectRoot))
 	root.AddCommand(newAudioCmd(stdout))
 	root.AddCommand(newSongCmd(stdout))
+	root.AddCommand(newBeatCommand(stdout))
 	root.AddCommand(newCastCmd(stdout))
 	root.AddCommand(newDialogueCmd(stdout))
 	return root

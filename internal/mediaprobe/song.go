@@ -12,9 +12,9 @@ import (
 
 // PrepareAlignment preserves time while decoding a mono 16 kHz analysis copy.
 func (t Toolchain) PrepareAlignment(ctx context.Context, source, dest string) error {
-	return t.songCommand(ctx, dest, "-i", source, "-vn", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le")
+	return t.transcode(ctx, dest, "-i", source, "-vn", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le")
 }
-func (t Toolchain) songCommand(ctx context.Context, dest string, args ...string) error {
+func (t Toolchain) transcode(ctx context.Context, dest string, args ...string) error {
 	binary, e := t.ffmpegPath()
 	if e != nil {
 		return e
@@ -34,7 +34,7 @@ func (t Toolchain) songCommand(ctx context.Context, dest string, args ...string)
 	cmd := exec.CommandContext(ctx, binary, argv...)
 	cmd.Env = t.env
 	if e = cmd.Run(); e != nil {
-		return fmt.Errorf("歌曲媒体处理失败：%s", commandError(e))
+		return fmt.Errorf("媒体处理失败：%s", commandError(e))
 	}
 	return os.Rename(name, dest)
 }
@@ -74,7 +74,7 @@ func (t Toolchain) MuxSong(ctx context.Context, video, audio, dest string, durat
 		return fmt.Errorf("歌曲静音母版不合格：%v", report.Problems)
 	}
 	filter := "apad=pad_dur=" + strconv.FormatFloat(math.Max(0, target-duration), 'f', 9, 64) + ",atrim=duration=" + strconv.FormatFloat(target, 'f', 9, 64)
-	if e = t.songCommand(ctx, dest, "-i", video, "-i", audio, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-af", filter, "-c:a", "aac", "-b:a", songAACBitrate, "-ar", "48000", "-ac", "2", "-movflags", "+faststart"); e != nil {
+	if e = t.transcode(ctx, dest, "-i", video, "-i", audio, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-af", filter, "-c:a", "aac", "-b:a", songAACBitrate, "-ar", "48000", "-ac", "2", "-movflags", "+faststart"); e != nil {
 		return e
 	}
 	report, e = t.Verify(dest, VerifyOptions{Spec: Spec{FPS: fps, Frames: frames, DurationSeconds: target, Tolerance: 1.0 / float64(fps), Audio: AudioPresent, SampleRate: 48000, Channels: 2}, ExactFrames: true, Decode: true})
