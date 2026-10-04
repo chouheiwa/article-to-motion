@@ -120,6 +120,13 @@ var builtinStyles = []Style{
 		SheetBackground: "#E9ECEF",
 		Fonts:           []Font{FontXiaolai400, FontCaveat600},
 	},
+	{
+		ID:              "anime-cel-v1",
+		Name:            "日系动漫",
+		Label:           "日系动漫：番剧感科普、成长与挑战、轻快故事",
+		SheetBackground: "#8FD3FF",
+		Fonts:           []Font{FontSmileySans400, FontBebasNeue400},
+	},
 }
 
 func AllStyles() []Style {

@@ -33,7 +33,7 @@ Canvas is chosen once at init and written to `frame.md`. Built-in presets:
 | `vertical-9x16` | 1080×1920, 30fps | Full-screen vertical (TikTok, etc.) |
 | `landscape-16x9` | 1920×1080, 30fps | Landscape platforms (Bilibili, YouTube) |
 
-Landscape safe areas avoid the player's bottom controls and progress bar instead of the right-hand interaction rail of vertical platforms; `frame.md` ends with landscape composition notes. All 12 styles support every canvas.
+Landscape safe areas avoid the player's bottom controls and progress bar instead of the right-hand interaction rail of vertical platforms; `frame.md` ends with landscape composition notes. All 13 styles support every canvas.
 
 Non-interactive environments (CI, pipes) must pass `--canvas` explicitly; there is no silent default.
 
@@ -45,7 +45,7 @@ Style is orthogonal to canvas and is also chosen once at init: the canvas fixes 
 am init my-video --canvas vertical-9x16 --style pixel-arcade-v1
 ```
 
-Built-in styles: `clear-system-blueprint-v1` (default, knowledge/tech explainers), `pixel-arcade-v1`, `scifi-hud-v1`, `cyberpunk-glitch-v1`, `candy-casual-v1`, `rebel-graphic-v1`, `fantasy-quest-v1`, `esports-broadcast-v1`, `visual-novel-v1` (game-inspired), plus `neon-data-dark-v1`, `editorial-magazine-v1`, `whiteboard-doodle-v1`. Each writes `frame.md`, a style guide under `docs/`, four layout example images, and copies the fonts it uses (all SIL OFL 1.1, licenses included) into `assets/fonts/`.
+Built-in styles: `clear-system-blueprint-v1` (default, knowledge/tech explainers), `pixel-arcade-v1`, `scifi-hud-v1`, `cyberpunk-glitch-v1`, `candy-casual-v1`, `rebel-graphic-v1`, `fantasy-quest-v1`, `esports-broadcast-v1`, `visual-novel-v1` (game-inspired), plus `neon-data-dark-v1`, `editorial-magazine-v1`, `whiteboard-doodle-v1`, `anime-cel-v1` (bright TV-anime look). Each writes `frame.md`, a style guide under `docs/`, four layout example images, and copies the fonts it uses (all SIL OFL 1.1, licenses included) into `assets/fonts/`.
 
 #### Custom style
 

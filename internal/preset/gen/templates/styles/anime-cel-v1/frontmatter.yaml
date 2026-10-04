@@ -1,0 +1,162 @@
+schema_version: 1
+style_id: anime-cel-v1
+style_name: 日系动漫
+scope:
+  - anime_episode_style_explainer
+  - growth_and_challenge_stories
+  - light_science_and_life_tips
+  - youth_and_campus_topics
+  - upbeat_concept_explainer
+# @@CANVAS_AND_SAFE_AREA@@
+colors:
+  canvas: "#8FD3FF"
+  sky_deep: "#2A6FC4"
+  cloud: "#FFFFFF"
+  cloud_shade: "#C9D6F2"
+  paper: "#FFF8EC"
+  ink: "#1B2240"
+  ink_soft: "#4A5578"
+  sakura: "#FF7FA8"
+  sunbeam: "#FFD23F"
+  impact_red: "#C42B3A"
+  hope_green: "#2FB574"
+typography:
+  primary_stack: '"Noto Sans SC", sans-serif'
+  mono_stack: '"Bebas Neue", "Noto Sans SC", sans-serif'
+  display_stack: '"Smiley Sans", "Noto Sans SC", sans-serif'
+  font_files:
+    - {family: "Noto Sans SC", weight: 400, file: "assets/fonts/noto-sans-sc-400.woff2"}
+    - {family: "Noto Sans SC", weight: 600, file: "assets/fonts/noto-sans-sc-600.woff2"}
+    - {family: "Noto Sans SC", weight: 700, file: "assets/fonts/noto-sans-sc-700.woff2"}
+    - {family: "Noto Sans SC", weight: 900, file: "assets/fonts/noto-sans-sc-900.woff2"}
+    - {family: "Smiley Sans", weight: 400, file: "assets/fonts/smiley-sans-oblique.woff2"}
+    - {family: "Bebas Neue", weight: 400, file: "assets/fonts/bebas-neue-400.woff2"}
+  sizes_px:
+    cover_min: 92
+    cover_max: 132
+    title_min: 54
+    title_max: 76
+    body_min: 26
+    body_max: 36
+    label_min: 22
+    label_max: 28
+  weights:
+    display: 400
+    heading: 400
+    body: 400
+    body_emphasis: 700
+    metadata: 700
+  line_heights:
+    display_min: 1.00
+    display_max: 1.10
+    body: 1.42
+    metadata: 1.15
+spacing:
+  content_left_px: {{CONTENT_LEFT_PX}}
+  content_width_px: {{CONTENT_WIDTH_PX}}
+  group_min_px: 12
+  group_max_px: 20
+  card_stack_min_px: 16
+  card_main_padding_min_px: 28
+  card_main_padding_max_px: 40
+  card_secondary_padding_min_px: 22
+  card_secondary_padding_max_px: 28
+  section_min_px: 32
+  section_max_px: 60
+  element_edge_min_px: 22
+  skeleton_bottom_min_px: 22
+radius:
+  sm_px: 6
+  md_px: 12
+  lg_px: 20
+  xl_px: 28
+  pill_px: 999
+scene_archetypes:
+  - id: proposition
+    name: 话数标题卡
+    use_for: 封面、钩子、章节开场、一句话强结论
+    example_png: assets/style-guide/examples/proposition.png
+  - id: comparison
+    name: 分格对照
+    use_for: 两种做法、误区与真相、之前与之后、两种选择
+    example_png: assets/style-guide/examples/comparison.png
+  - id: process
+    name: 分镜推进
+    use_for: 步骤、因果链、成长阶段、按顺序发生的事
+    example_png: assets/style-guide/examples/process.png
+  - id: capability_deck
+    name: 设定资料
+    use_for: 多维要点、能力与特征、要素拆解、全片总结
+    example_png: assets/style-guide/examples/capability_deck.png
+motion:
+  phases: {build: 0.28, breathe: 0.52, resolve: 0.20}
+  entrance_seconds: {min: 0.20, max: 0.45}
+  exit_seconds: {min: 0.15, max: 0.30}
+  transition_seconds: {min: 0.20, max: 0.40}
+  first_action_delay_seconds: {min: 0.10, max: 0.25}
+  entrance_ease: [expo.out, power3.out, back.out(1.4)]
+  exit_ease: [power2.in, expo.in]
+  verbs: [TITLE_DROP, ZOOM_LINES, PANEL_IN, SMEAR, POP, SPARKLE, EYECATCH]
+  ambient_per_scene_max: 1
+  max_same_ease_tweens: 2
+audio:
+  sample_rate_hz: 48000
+  channels: 2
+  voice_integrated_lufs: {min: -18, max: -16}
+  bgm_integrated_lufs: {min: -30, max: -26}
+  bgm_ducking_db: {min: 6, max: 10}
+  ducking_attack_seconds: {min: 0.04, max: 0.12}
+  ducking_release_seconds: {min: 0.25, max: 0.60}
+  bgm_fade_seconds: {min: 0.80, max: 1.50}
+  sfx_gain_db: {min: -18, max: -12}
+  sfx_max_simultaneous: 2
+  final_integrated_lufs: -16
+  final_lufs_tolerance: 1
+  true_peak_max_dbtp: -1
+  lra_lu: {min: 2, max: 6}
+subtitles:
+  required: false
+  font_size_px: {min: 32, max: 38}
+  max_width_px: {{SUBTITLE_MAX_WIDTH_PX}}
+  max_lines: 2
+  max_fullwidth_chars_per_line: 16
+  line_height: {min: 1.30, max: 1.40}
+  background: "rgba(27, 34, 64, 0.86)"
+  text_color: "#FFFFFF"
+  padding_px: {vertical: 14, horizontal: 22}
+  radius_px: 12
+  break_rules:
+    - keep_proper_nouns_intact
+    - keep_english_phrases_intact
+    - keep_numbers_and_units_intact
+    - preserve_real_speech_gaps
+cover:
+  frame_zero_complete: true
+  default_lines: 2
+  max_lines: 3
+  max_fullwidth_chars_per_line: 8
+  font_size_px: {min: 92, max: 132}
+  line_height: {min: 1.00, max: 1.10}
+  max_width_px: {{COVER_MAX_WIDTH_PX}}
+  contrast_ratio_min: 7.0
+  stable_frames: 18
+forbidden:
+  - black_or_blank_frame_zero
+  - cover_fade_in_intermediate_state
+  - copying_anime_ip_characters_logos_or_title_lettering
+  - drawing_character_faces_or_imitating_specific_artists
+  - photographic_or_ai_generated_anime_backgrounds
+  - text_directly_on_sky_without_panel_or_ink_stroke
+  - small_text_on_sakura_or_hope_green_other_than_ink
+  - body_text_in_display_font
+  - text_moving_while_being_read
+  - zoom_lines_behind_body_text
+  - full_screen_flash_strobe
+  - continuous_or_long_screen_shake
+  - gradient_text
+  - colors_outside_palette_tokens
+  - arbitrary_new_brand_colors
+  - labels_or_icons_touching_edges
+  - skeleton_or_list_without_bottom_padding
+  - sfx_on_every_element
+  - music_masking_voice

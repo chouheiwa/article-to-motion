@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A6FC4"/>
+      <stop offset="0.62" stop-color="#8FD3FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+  <rect x="160" y="96" width="300" height="56" rx="28" fill="#FFF8EC" stroke="#1B2240" stroke-width="3"/>
+  <rect x="160" y="96" width="72" height="56" rx="28" fill="#1B2240"/>
+  <text x="196" y="135" fill="#FFD23F" font-size="32" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif">02</text>
+  <text x="252" y="135" fill="#1B2240" font-size="28" font-weight="700" font-family="'Noto Sans SC', sans-serif">分格对照</text>
+  <rect x="1540" y="100" width="220" height="48" rx="24" fill="#1B2240" stroke="#1B2240" stroke-width="3"/>
+  <text x="1650.0" y="133.36" fill="#FFFFFF" font-size="26" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="2">COMPARISON</text>
+  <polygon points="120,190 1010,190 920,816 120,816" fill="#C9D6F2" stroke="#1B2240" stroke-width="6" stroke-linejoin="miter"/>
+  <rect x="200" y="230" width="200" height="48" rx="24" fill="#4A5578" stroke="#1B2240" stroke-width="0"/>
+  <text x="300.0" y="262.64" fill="#FFFFFF" font-size="24" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="1">BEFORE · 以为</text>
+  <text x="200" y="358" fill="#1B2240" font-size="68" font-family="'Smiley Sans', 'Noto Sans SC', sans-serif">死记硬背</text>
+  <text x="200" y="422" fill="#1B2240" font-size="32" font-weight="700" font-family="'Noto Sans SC', sans-serif">背完就忘，</text>
+  <text x="200" y="468" fill="#1B2240" font-size="32" font-weight="400" font-family="'Noto Sans SC', sans-serif">考完清零。</text>
+  <rect x="630" y="600" width="180" height="36" rx="4" fill="#FF7FA8" stroke="#1B2240" stroke-width="4"/>
+  <rect x="644" y="561" width="158" height="36" rx="4" fill="#FFD23F" stroke="#1B2240" stroke-width="4"/>
+  <rect x="630" y="521" width="180" height="36" rx="4" fill="#C9D6F2" stroke="#1B2240" stroke-width="4"/>
+  <rect x="644" y="482" width="158" height="36" rx="4" fill="#FF7FA8" stroke="#1B2240" stroke-width="4"/>
+  <rect x="630" y="442" width="180" height="36" rx="4" fill="#FFD23F" stroke="#1B2240" stroke-width="4"/>
+  <circle cx="870" cy="440" r="54" fill="#C42B3A" stroke="#1B2240" stroke-width="5"/>
+  <path d="M847 417 L893 463 M893 417 L847 463" stroke="#FFFFFF" stroke-width="11" stroke-linecap="round"/>
+  <polygon points="1034,190 1800,190 1800,816 944,816" fill="#FFF8EC" stroke="#1B2240" stroke-width="6" stroke-linejoin="miter"/>
+  <clipPath id="clip7"><rect x="1420" y="0" width="500" height="1080"/></clipPath>
+  <clipPath id="clip8"><polygon points="1034,190 1800,190 1800,816 944,816"/></clipPath>
+  <g clip-path="url(#clip8)"><g clip-path="url(#clip7)"><g fill="#1B2240" opacity="0.14"><polygon points="1775,637 2160,620 2160,641"/><polygon points="1753,667 2156,711 2153,733"/><polygon points="1762,688 2147,766 2141,791"/><polygon points="1766,721 2123,847 2112,874"/><polygon points="1759,760 2079,942 2068,959"/><polygon points="1760,787 2050,986 2037,1004"/><polygon points="1726,806 1992,1056 1975,1073"/><polygon points="1704,818 1947,1098 1928,1114"/><polygon points="1686,853 1872,1153 1861,1159"/><polygon points="1655,869 1802,1189 1779,1198"/><polygon points="1613,850 1721,1218 1694,1225"/><polygon points="1588,891 1637,1235 1618,1237"/><polygon points="1555,839 1553,1240 1540,1240"/><polygon points="1535,858 1506,1238 1478,1234"/><polygon points="1500,856 1409,1221 1392,1216"/><polygon points="1474,852 1343,1199 1326,1192"/><polygon points="1441,843 1269,1165 1246,1151"/><polygon points="1399,839 1193,1115 1172,1098"/><polygon points="1383,813 1137,1065 1126,1055"/><polygon points="1375,774 1082,1003 1066,981"/><polygon points="1346,760 1040,940 1033,927"/><polygon points="1380,714 1008,875 1002,859"/><polygon points="1370,687 981,797 974,769"/><polygon points="1361,663 965,717 963,698"/><polygon points="1312,643 960,660 960,635"/><polygon points="1368,620 962,589 964,567"/><polygon points="1321,573 980,486 985,469"/><polygon points="1326,535 1008,404 1017,385"/><polygon points="1360,527 1034,352 1040,340"/><polygon points="1384,513 1069,295 1078,282"/><polygon points="1425,503 1133,218 1144,208"/><polygon points="1410,435 1198,161 1212,151"/><polygon points="1454,446 1264,118 1281,109"/><polygon points="1472,428 1321,90 1342,81"/><polygon points="1496,396 1396,63 1418,57"/><polygon points="1529,404 1472,46 1491,44"/><polygon points="1556,385 1542,40 1559,40"/><polygon points="1585,451 1629,44 1650,47"/><polygon points="1609,455 1702,57 1723,63"/><polygon points="1635,461 1783,83 1804,92"/><polygon points="1679,437 1855,118 1872,128"/><polygon points="1704,449 1911,154 1930,168"/><polygon points="1721,469 1967,199 1977,208"/><polygon points="1738,511 2041,282 2051,295"/><polygon points="1746,534 2077,335 2086,350"/><polygon points="1771,550 2108,396 2115,413"/><polygon points="1792,575 2135,469 2140,487"/><polygon points="1796,602 2151,534 2154,555"/></g></g></g>
+  <rect x="1090" y="230" width="200" height="48" rx="24" fill="#1B2240" stroke="#1B2240" stroke-width="0"/>
+  <text x="1190.0" y="262.64" fill="#FFFFFF" font-size="24" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="1">AFTER · 其实</text>
+  <text x="1090" y="358" fill="#1B2240" font-size="68" font-family="'Smiley Sans', 'Noto Sans SC', sans-serif">动手做一遍</text>
+  <text x="1090" y="422" fill="#1B2240" font-size="32" font-weight="700" font-family="'Noto Sans SC', sans-serif">做过一次的，</text>
+  <text x="1090" y="468" fill="#1B2240" font-size="32" font-weight="400" font-family="'Noto Sans SC', sans-serif">才真正属于你。</text>
+  <g transform="rotate(-30 1560 600)"><rect x="1546" y="570" width="27" height="150" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="5"/><rect x="1485" y="525" width="150" height="51" rx="8" fill="#C9D6F2" stroke="#1B2240" stroke-width="5"/></g>
+  <g stroke="#1B2240" stroke-width="6" stroke-linecap="round"><line x1="1642" y1="488" x2="1672" y2="458"/><line x1="1668" y1="528" x2="1707" y2="516"/></g>
+  <polygon points="1410,404 1416,424 1436,430 1416,436 1410,456 1404,436 1384,430 1404,424" fill="#FFD23F" stroke="#1B2240" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="1410" cy="690" r="54" fill="#2FB574" stroke="#1B2240" stroke-width="5"/>
+  <circle cx="1410" cy="690" r="28" fill="none" stroke="#FFFFFF" stroke-width="11"/>
+</svg>

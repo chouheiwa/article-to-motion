@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A6FC4"/>
+      <stop offset="0.62" stop-color="#8FD3FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1080" height="1920" fill="url(#sky)"/>
+  <rect x="88" y="120" width="300" height="56" rx="28" fill="#FFF8EC" stroke="#1B2240" stroke-width="3"/>
+  <rect x="88" y="120" width="72" height="56" rx="28" fill="#1B2240"/>
+  <text x="124" y="159" fill="#FFD23F" font-size="32" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif">03</text>
+  <text x="180" y="159" fill="#1B2240" font-size="28" font-weight="700" font-family="'Noto Sans SC', sans-serif">分镜推进</text>
+  <rect x="772" y="124" width="220" height="48" rx="24" fill="#1B2240" stroke="#1B2240" stroke-width="3"/>
+  <text x="882.0" y="157.36" fill="#FFFFFF" font-size="26" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="2">PROCESS</text>
+  <rect x="88" y="200" width="904" height="293" fill="#C9D6F2" stroke="#1B2240" stroke-width="6"/>
+  <circle cx="218" cy="346" r="70" fill="#FFFFFF" stroke="#1B2240" stroke-width="5"/>
+  <circle cx="218" cy="346" r="45" fill="#FF7FA8" stroke="#1B2240" stroke-width="4"/>
+  <circle cx="218" cy="346" r="20" fill="#FFD23F" stroke="#1B2240" stroke-width="4"/>
+  <rect x="110" y="222" width="72" height="48" rx="6" fill="#1B2240"/>
+  <text x="146" y="258" fill="#FFFFFF" font-size="36" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif">01</text>
+  <rect x="864" y="222" width="104" height="48" rx="24" fill="#2FB574" stroke="#1B2240" stroke-width="3"/>
+  <text x="916.0" y="256.08" fill="#1B2240" font-size="28" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="2">DONE</text>
+  <text x="338" y="340.5" fill="#1B2240" font-size="34" font-weight="700" font-family="'Noto Sans SC', sans-serif">定个小目标</text>
+  <text x="338" y="386.5" fill="#4A5578" font-size="26" font-weight="400" font-family="'Noto Sans SC', sans-serif">只盯一件事</text>
+  <rect x="88" y="517" width="904" height="293" fill="#C9D6F2" stroke="#1B2240" stroke-width="6"/>
+  <circle cx="218" cy="664" r="70" fill="#FFFFFF" stroke="#1B2240" stroke-width="5"/>
+  <path d="M218 664 L218 615 A49 49 0 0 1 260 688 Z" fill="#FFD23F"/>
+  <path d="M218 664 L218 621 M218 664 L250 671" stroke="#1B2240" stroke-width="6" stroke-linecap="round"/>
+  <rect x="110" y="539" width="72" height="48" rx="6" fill="#1B2240"/>
+  <text x="146" y="575" fill="#FFFFFF" font-size="36" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif">02</text>
+  <rect x="864" y="539" width="104" height="48" rx="24" fill="#2FB574" stroke="#1B2240" stroke-width="3"/>
+  <text x="916.0" y="573.08" fill="#1B2240" font-size="28" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="2">DONE</text>
+  <text x="338" y="657.5" fill="#1B2240" font-size="34" font-weight="700" font-family="'Noto Sans SC', sans-serif">每天 20 分钟</text>
+  <text x="338" y="703.5" fill="#4A5578" font-size="26" font-weight="400" font-family="'Noto Sans SC', sans-serif">比熬夜五小时强</text>
+  <rect x="88" y="834" width="904" height="293" fill="#FFF8EC" stroke="#1B2240" stroke-width="6"/>
+  <clipPath id="clip6"><rect x="88" y="834" width="226" height="293"/></clipPath>
+  <g clip-path="url(#clip6)"><g fill="#1B2240" opacity="0.16"><polygon points="348,979 1121,950 1122,985"/><polygon points="330,1001 1110,1129 1106,1152"/><polygon points="344,1019 1087,1230 1080,1253"/><polygon points="320,1029 1039,1359 1025,1387"/><polygon points="329,1059 964,1491 947,1515"/><polygon points="299,1062 860,1617 846,1630"/><polygon points="300,1088 781,1688 749,1712"/><polygon points="276,1100 631,1785 596,1802"/><polygon points="250,1090 492,1842 456,1853"/><polygon points="236,1112 356,1874 326,1878"/><polygon points="218,1099 229,1884 200,1884"/><polygon points="201,1089 93,1876 67,1872"/><polygon points="172,1114 -60,1841 -96,1828"/><polygon points="156,1098 -187,1789 -216,1774"/><polygon points="149,1080 -283,1733 -312,1713"/><polygon points="132,1070 -400,1640 -417,1624"/><polygon points="116,1057 -496,1534 -514,1511"/><polygon points="109,1037 -580,1405 -590,1386"/><polygon points="112,1017 -633,1285 -641,1262"/><polygon points="91,1002 -672,1139 -675,1119"/><polygon points="87,977 -686,970 -685,942"/><polygon points="110,960 -673,825 -669,807"/><polygon points="97,939 -643,704 -630,667"/><polygon points="95,921 -602,600 -589,574"/><polygon points="129,912 -512,448 -489,417"/><polygon points="127,886 -417,337 -397,318"/><polygon points="141,879 -346,274 -312,248"/><polygon points="162,866 -192,175 -171,165"/><polygon points="182,868 -73,125 -41,115"/><polygon points="201,866 76,88 102,84"/><polygon points="216,871 182,77 217,77"/><polygon points="236,853 335,84 355,87"/><polygon points="251,879 485,117 515,127"/><polygon points="267,884 613,168 637,180"/><polygon points="280,890 709,222 745,246"/><polygon points="307,890 841,325 858,342"/><polygon points="312,908 926,419 945,443"/><polygon points="324,929 1028,578 1035,595"/><polygon points="336,942 1071,681 1084,721"/><polygon points="332,962 1108,820 1113,855"/></g></g>
+  <rect x="148" y="948" width="98" height="77" rx="14" fill="#FFFFFF" stroke="#1B2240" stroke-width="5"/>
+  <path d="M246 966 q35 0 35 24 t-35 24" fill="none" stroke="#1B2240" stroke-width="5"/>
+  <path d="M176 931 q10 -14 0 -28" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M204 931 q10 -14 0 -28" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+  <text x="270.5" y="941.5" fill="#1B2240" font-size="38" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif">Zz</text>
+  <rect x="110" y="856" width="72" height="48" rx="6" fill="#FFD23F"/>
+  <text x="146" y="892" fill="#1B2240" font-size="36" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif">03</text>
+  <rect x="864" y="856" width="104" height="48" rx="24" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <text x="916.0" y="890.8" fill="#1B2240" font-size="30" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="2">NOW</text>
+  <text x="338" y="974.5" fill="#1B2240" font-size="34" font-weight="700" font-family="'Noto Sans SC', sans-serif">卡住就休息</text>
+  <text x="338" y="1020.5" fill="#4A5578" font-size="26" font-weight="400" font-family="'Noto Sans SC', sans-serif">让大脑后台整理</text>
+  <rect x="88" y="1151" width="904" height="293" fill="#FFF8EC" stroke="#1B2240" stroke-width="6"/>
+  <path d="M288 1298 A70 70 0 1 1 239 1232" fill="none" stroke="#1B2240" stroke-width="34" stroke-linecap="round"/>
+  <path d="M288 1298 A70 70 0 1 1 239 1232" fill="none" stroke="#2FB574" stroke-width="24" stroke-linecap="round"/>
+  <polygon points="236,1204 270,1232 232,1260" fill="#2FB574" stroke="#1B2240" stroke-width="5" stroke-linejoin="round"/>
+  <rect x="110" y="1173" width="72" height="48" rx="6" fill="#1B2240"/>
+  <text x="146" y="1209" fill="#FFFFFF" font-size="36" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif">04</text>
+  <text x="338" y="1291.5" fill="#1B2240" font-size="34" font-weight="700" font-family="'Noto Sans SC', sans-serif">回头复盘</text>
+  <text x="338" y="1337.5" fill="#4A5578" font-size="26" font-weight="400" font-family="'Noto Sans SC', sans-serif">把卡点写下来</text>
+</svg>

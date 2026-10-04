@@ -33,7 +33,7 @@ cd my-video
 | `vertical-9x16` | 1080×1920，30fps | 抖音等全屏竖屏平台 |
 | `landscape-16x9` | 1920×1080，30fps | B 站、YouTube 等横屏平台 |
 
-横屏的安全区避让底部播放器控制栏与进度条（竖屏避让的是抖音右侧互动栏），`frame.md` 末尾附有横屏构图要点。12 套风格都同时支持竖屏和横屏。
+横屏的安全区避让底部播放器控制栏与进度条（竖屏避让的是抖音右侧互动栏），`frame.md` 末尾附有横屏构图要点。13 套风格都同时支持竖屏和横屏。
 
 非交互环境（CI、管道）必须显式传入 `--canvas`，不会静默取默认值。
 
@@ -59,6 +59,7 @@ am init my-video --canvas vertical-9x16 --style pixel-arcade-v1
 | `neon-data-dark-v1` | 暗夜数据霓虹 | AI、前沿技术、数据与指标 |
 | `editorial-magazine-v1` | 杂志编辑排版 | 观点、人文、商业评论 |
 | `whiteboard-doodle-v1` | 白板手绘 | 教程、概念拆解、课堂讲解 |
+| `anime-cel-v1` | 日系动漫 | 番剧感科普、成长与挑战、轻快故事 |
 
 每套风格写入 `frame.md`、`docs/<风格名>-视频风格说明书.md` 与四张版式示例图，并把该风格用到的字体（均为 SIL OFL 1.1，许可证随附）拷进 `assets/fonts/`。
 

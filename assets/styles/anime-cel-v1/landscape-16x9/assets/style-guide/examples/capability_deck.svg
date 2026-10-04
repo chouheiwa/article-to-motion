@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A6FC4"/>
+      <stop offset="0.62" stop-color="#8FD3FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+  <rect x="160" y="96" width="300" height="56" rx="28" fill="#FFF8EC" stroke="#1B2240" stroke-width="3"/>
+  <rect x="160" y="96" width="72" height="56" rx="28" fill="#1B2240"/>
+  <text x="196" y="135" fill="#FFD23F" font-size="32" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif">04</text>
+  <text x="252" y="135" fill="#1B2240" font-size="28" font-weight="700" font-family="'Noto Sans SC', sans-serif">设定资料</text>
+  <rect x="1540" y="100" width="220" height="48" rx="24" fill="#1B2240" stroke="#1B2240" stroke-width="3"/>
+  <text x="1650.0" y="133.36" fill="#FFFFFF" font-size="26" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="2">CAPABILITY DECK</text>
+  <g fill="#C9D6F2"><circle cx="1583" cy="970" r="61"/><circle cx="1644" cy="926" r="82"/><circle cx="1721" cy="910" r="94"/><circle cx="1792" cy="948" r="66"/><circle cx="1842" cy="976" r="46"/><rect x="1523" y="954" width="352" height="61" rx="30"/></g>
+  <g fill="#FFFFFF"><circle cx="1570" cy="952" r="61"/><circle cx="1630" cy="908" r="82"/><circle cx="1708" cy="892" r="94"/><circle cx="1779" cy="930" r="66"/><circle cx="1828" cy="958" r="46"/><rect x="1510" y="936" width="352" height="61" rx="30"/></g>
+  <rect x="132" y="202" width="1680" height="626" rx="28" fill="#1B2240"/>
+  <rect x="120" y="190" width="1680" height="626" rx="28" fill="#FFF8EC" stroke="#1B2240" stroke-width="6"/>
+  <text x="160" y="282" fill="#1B2240" font-size="68" font-family="'Smiley Sans', 'Noto Sans SC', sans-serif">设定资料</text>
+  <text x="460" y="280" fill="#4A5578" font-size="30" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="2">SETTING NOTES · 学习者</text>
+  <line x1="160" y1="314" x2="1760" y2="314" stroke="#1B2240" stroke-width="3" stroke-dasharray="14 10"/>
+  <circle cx="1710" cy="260" r="40" fill="#FFFFFF" stroke="#1B2240" stroke-width="5"/>
+  <circle cx="1710" cy="260" r="26" fill="#FF7FA8" stroke="#1B2240" stroke-width="4"/>
+  <circle cx="1710" cy="260" r="11" fill="#FFD23F" stroke="#1B2240" stroke-width="4"/>
+  <rect x="160" y="350" width="379" height="426" rx="20" fill="#FFF8EC" stroke="#1B2240" stroke-width="5"/>
+  <rect x="429" y="336" width="110" height="34" fill="#C9D6F2" opacity="0.9" transform="rotate(12 484 353)"/>
+  <text x="188" y="402" fill="#4A5578" font-size="30" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="2">FOCUS</text>
+  <text x="188" y="458" fill="#1B2240" font-size="44" font-weight="900" font-family="'Noto Sans SC', sans-serif">专注</text>
+  <text x="188" y="508" fill="#1B2240" font-size="26" font-weight="400" font-family="'Noto Sans SC', sans-serif">一次只做一件事</text>
+  <circle cx="350" cy="614" r="54" fill="#FFFFFF" stroke="#1B2240" stroke-width="5"/>
+  <circle cx="350" cy="614" r="35" fill="#FF7FA8" stroke="#1B2240" stroke-width="4"/>
+  <circle cx="350" cy="614" r="15" fill="#FFD23F" stroke="#1B2240" stroke-width="4"/>
+  <rect x="188" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="254" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="320" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="387" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="453" y="720" width="58" height="26" rx="6" fill="#FFFFFF" stroke="#1B2240" stroke-width="3"/>
+  <rect x="557" y="340" width="399" height="446" rx="26" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="567" y="350" width="379" height="426" rx="20" fill="#FFF8EC" stroke="#1B2240" stroke-width="5"/>
+  <rect x="836" y="336" width="110" height="34" fill="#C9D6F2" opacity="0.9" transform="rotate(12 891 353)"/>
+  <text x="595" y="402" fill="#4A5578" font-size="30" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="2">RHYTHM</text>
+  <text x="595" y="458" fill="#1B2240" font-size="44" font-weight="900" font-family="'Noto Sans SC', sans-serif">节奏</text>
+  <rect x="695" y="426" width="140" height="40" rx="20" fill="#1B2240" stroke="#1B2240" stroke-width="0"/>
+  <text x="765.0" y="453.92" fill="#FFD23F" font-size="22" text-anchor="middle" font-family="'Noto Sans SC', sans-serif">核心设定</text>
+  <text x="595" y="508" fill="#1B2240" font-size="26" font-weight="400" font-family="'Noto Sans SC', sans-serif">练一阵，歇一阵</text>
+  <circle cx="756" cy="614" r="54" fill="#FFFFFF" stroke="#1B2240" stroke-width="5"/>
+  <path d="M756 614 L756 576 A38 38 0 0 1 789 633 Z" fill="#FFD23F"/>
+  <path d="M756 614 L756 581 M756 614 L780 619" stroke="#1B2240" stroke-width="6" stroke-linecap="round"/>
+  <rect x="595" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="661" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="727" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="794" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="860" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="974" y="350" width="379" height="426" rx="20" fill="#FFF8EC" stroke="#1B2240" stroke-width="5"/>
+  <rect x="1243" y="336" width="110" height="34" fill="#C9D6F2" opacity="0.9" transform="rotate(12 1298 353)"/>
+  <text x="1002" y="402" fill="#4A5578" font-size="30" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="2">REVIEW</text>
+  <text x="1002" y="458" fill="#1B2240" font-size="44" font-weight="900" font-family="'Noto Sans SC', sans-serif">复盘</text>
+  <text x="1002" y="508" fill="#1B2240" font-size="26" font-weight="400" font-family="'Noto Sans SC', sans-serif">卡点比答案更值钱</text>
+  <path d="M1218 614 A54 54 0 1 1 1180 563" fill="none" stroke="#1B2240" stroke-width="28" stroke-linecap="round"/>
+  <path d="M1218 614 A54 54 0 1 1 1180 563" fill="none" stroke="#2FB574" stroke-width="18" stroke-linecap="round"/>
+  <polygon points="1178,541 1204,563 1175,584" fill="#2FB574" stroke="#1B2240" stroke-width="5" stroke-linejoin="round"/>
+  <rect x="1002" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="1068" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="1134" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="1201" y="720" width="58" height="26" rx="6" fill="#FFFFFF" stroke="#1B2240" stroke-width="3"/>
+  <rect x="1267" y="720" width="58" height="26" rx="6" fill="#FFFFFF" stroke="#1B2240" stroke-width="3"/>
+  <rect x="1381" y="350" width="379" height="426" rx="20" fill="#FFF8EC" stroke="#1B2240" stroke-width="5"/>
+  <rect x="1650" y="336" width="110" height="34" fill="#C9D6F2" opacity="0.9" transform="rotate(12 1705 353)"/>
+  <text x="1409" y="402" fill="#4A5578" font-size="30" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif" letter-spacing="2">CURIOSITY</text>
+  <text x="1409" y="458" fill="#1B2240" font-size="44" font-weight="900" font-family="'Noto Sans SC', sans-serif">好奇</text>
+  <text x="1409" y="508" fill="#1B2240" font-size="26" font-weight="400" font-family="'Noto Sans SC', sans-serif">先问为什么</text>
+  <polygon points="1629,614 1611,625 1621,644 1600,644 1600,665 1581,655 1570,673 1559,655 1540,665 1540,644 1519,644 1529,625 1511,614 1529,603 1519,584 1540,584 1540,563 1559,573 1570,555 1581,573 1600,563 1600,584 1621,584 1611,603" fill="#FFD23F" stroke="#1B2240" stroke-width="5" stroke-linejoin="round"/>
+  <text x="1570" y="636.68" fill="#1B2240" font-size="65" text-anchor="middle" font-family="'Bebas Neue', 'Noto Sans SC', sans-serif">?</text>
+  <rect x="1409" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="1475" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="1541" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="1608" y="720" width="58" height="26" rx="6" fill="#FFD23F" stroke="#1B2240" stroke-width="3"/>
+  <rect x="1674" y="720" width="58" height="26" rx="6" fill="#FFFFFF" stroke="#1B2240" stroke-width="3"/>
+</svg>
