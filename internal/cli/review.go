@@ -2,9 +2,12 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -35,6 +38,9 @@ func newReviewCommand(stdout io.Writer, projectRoot *string) *cobra.Command {
              不一致说明漏拼、重拼或拼接掉帧
   镜头交界   给了 --scenes 时，取每个交界两侧各一帧做纯色判定。切黑、切白是
              合法转场，机器分不清有意还是事故，所以只进 hints，不改变退出码
+  响度       有音轨时解码成片，量积分响度、真峰与响度范围写进报告的 loudness；
+             项目里有 frame.md 时与它 audio 块的目标比对。偏离只进 hints，
+             不改变退出码：平台响度规范各不相同，frame.md 的数是缺省建议
   交界条带   给了 --scenes 时，每个交界出一张 seam-NN.png：上一行是切点前 6 帧，
              下一行是切点后 6 帧，用来看转场是否顺、有没有一帧闪烁或跳变
 
@@ -79,12 +85,16 @@ func newReviewCommand(stdout io.Writer, projectRoot *string) *cobra.Command {
 					segments = append(segments, review.Segment{ID: s.ID, Frames: int(math.Round(s.DurationSeconds * float64(rate)))})
 				}
 			}
+			loudness, err := reviewLoudnessTarget(rootDir, silent)
+			if err != nil {
+				return err
+			}
 			toolchain, err := mediaprobe.New(currentEnvironment())
 			if err != nil {
 				return err
 			}
 			report, err := review.Run(toolchain, review.Options{
-				Video: args[0], FPS: rate, Segments: segments, OutDir: outDir, Silent: silent,
+				Video: args[0], FPS: rate, Segments: segments, OutDir: outDir, Silent: silent, Loudness: loudness,
 				SyncTolerance: syncTolerance, Every: every, TilesPerSheet: perSheet, ThumbWidth: thumbWidth,
 			})
 			if err != nil {
@@ -124,6 +134,23 @@ func newReviewCommand(stdout io.Writer, projectRoot *string) *cobra.Command {
 	cmd.Flags().IntVar(&perSheet, "per-sheet", review.DefaultTilesPerSheet, "每张联系表的最大格数，超出分页")
 	cmd.Flags().IntVar(&thumbWidth, "thumb-width", review.DefaultThumbWidth, "联系表缩略图宽度（像素）")
 	return cmd
+}
+
+// reviewLoudnessTarget 从项目根的 frame.md 读成片响度目标。
+// 没有 frame.md（脱离项目使用）时不比对；有但读不出目标时报错，
+// 不静默跳过——那会让人以为响度已经查过了。
+func reviewLoudnessTarget(rootDir string, silent bool) (*review.LoudnessTarget, error) {
+	if silent {
+		return nil, nil
+	}
+	if _, err := os.Stat(filepath.Join(rootDir, "frame.md")); errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	targets, err := scene.AudioTargetsOf(rootDir, "frame.md")
+	if err != nil {
+		return nil, fmt.Errorf("无法从 %s 的 frame.md 读出响度目标：%w", rootDir, err)
+	}
+	return &review.LoudnessTarget{IntegratedLUFS: targets.IntegratedLUFS, Tolerance: targets.Tolerance, TruePeakMax: targets.TruePeakMax}, nil
 }
 
 func newSceneLintCommand(stdout io.Writer) *cobra.Command {

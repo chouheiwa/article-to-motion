@@ -83,3 +83,31 @@ func TestCanvasOfToleratesMalformedMoodRefs(t *testing.T) {
 		t.Fatalf("画幅应照常读出，实际 %+v, %v", canvas, err)
 	}
 }
+
+func TestAudioTargetsOfReadsFinalMixTargets(t *testing.T) {
+	dir := t.TempDir()
+	full := frameWithTokens("x\naudio:\n  final_integrated_lufs: -16\n  final_lufs_tolerance: 1\n  true_peak_max_dbtp: -1\n")
+	os.WriteFile(filepath.Join(dir, "frame.md"), []byte(full), 0o644)
+	got, err := AudioTargetsOf(dir, "frame.md")
+	if err != nil || got != (AudioTargets{IntegratedLUFS: -16, Tolerance: 1, TruePeakMax: -1}) {
+		t.Fatalf("响度目标不符：%+v, %v", got, err)
+	}
+	// 缺一个字段就整体报错，不拿零值当目标。
+	os.WriteFile(filepath.Join(dir, "frame.md"), []byte(frameWithTokens("x\naudio:\n  final_integrated_lufs: -16\n  final_lufs_tolerance: 1\n")), 0o644)
+	if _, err := AudioTargetsOf(dir, "frame.md"); err == nil || !strings.Contains(err.Error(), "true_peak_max_dbtp") {
+		t.Fatalf("缺字段应报错并点名，实际 %v", err)
+	}
+}
+
+// 生成出来的每份 frame.md 都必须读得出响度目标，否则 am review 会静默跳过比对。
+func TestEveryGeneratedFrameHasAudioTargets(t *testing.T) {
+	frames, err := filepath.Glob(filepath.Join("..", "..", "assets", "styles", "*", "*", "frame.md"))
+	if err != nil || len(frames) == 0 {
+		t.Fatalf("找不到生成的 frame.md：%v", err)
+	}
+	for _, frame := range frames {
+		if _, err := AudioTargetsOf(filepath.Dir(frame), "frame.md"); err != nil {
+			t.Errorf("%s：%v", frame, err)
+		}
+	}
+}

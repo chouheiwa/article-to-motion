@@ -376,6 +376,11 @@ type styleTokens struct {
 	// 写成 []string 的话，一个写错的条目会让整份 frontmatter 解析失败，
 	// 连画幅都读不出来，报错里还看不出问题在 mood_refs。
 	MoodRefs []any `yaml:"mood_refs"`
+	Audio    struct {
+		FinalLUFS     *float64 `yaml:"final_integrated_lufs"`
+		LUFSTolerance *float64 `yaml:"final_lufs_tolerance"`
+		TruePeakMax   *float64 `yaml:"true_peak_max_dbtp"`
+	} `yaml:"audio"`
 }
 
 // readStyleTokens 解析镜头目录里视觉规范文件的 frontmatter。
@@ -433,6 +438,27 @@ func CanvasOf(directory, styleGuide string) (Canvas, error) {
 		return Canvas{}, fmt.Errorf("视觉规范 %s 的 canvas 缺少 width_px / height_px / fps", styleGuide)
 	}
 	return Canvas{WidthPx: c.WidthPx, HeightPx: c.HeightPx, FPS: c.FPS}, nil
+}
+
+// AudioTargets 是成片混音的响度目标，取自视觉规范的 audio 块。
+type AudioTargets struct {
+	IntegratedLUFS float64
+	Tolerance      float64
+	TruePeakMax    float64
+}
+
+// AudioTargetsOf 读出视觉规范里的成片响度目标。三个字段缺一即报错：
+// 给半套目标做比对，结论会比不比更误导。
+func AudioTargetsOf(directory, styleGuide string) (AudioTargets, error) {
+	tokens, err := readStyleTokens(directory, styleGuide)
+	if err != nil {
+		return AudioTargets{}, err
+	}
+	a := tokens.Audio
+	if a.FinalLUFS == nil || a.LUFSTolerance == nil || a.TruePeakMax == nil {
+		return AudioTargets{}, fmt.Errorf("视觉规范 %s 的 audio 缺少 final_integrated_lufs / final_lufs_tolerance / true_peak_max_dbtp", styleGuide)
+	}
+	return AudioTargets{IntegratedLUFS: *a.FinalLUFS, Tolerance: *a.LUFSTolerance, TruePeakMax: *a.TruePeakMax}, nil
 }
 
 // castSection 拼装 BuildPrompt 里的角色契约段，与上面的 style 段同构：
@@ -636,6 +662,10 @@ const determinismSection = `
 // 都靠「出静帧 → 看图 → 改代码」的多轮循环，一次盲写就渲染是本项目产出
 // 偏差的最大单点原因。清单写成具体可判的问题而不是「好不好看」：视觉模型
 // 擅长照清单找问题，不擅长凭空自我批评。
+//
+// 文字对账单列出来：渲染器为了填满 HUD 与图表最爱编数字，而「全片唯一一处
+// 关于画面本身的陈述恰好对不上」是同类产线反复踩过的坑。它只有本镜头的
+// 字幕与文本，全片对回文章原文由制作提示词第七阶段负责。
 const selfReviewSection = `
 画面自查（强制，正式渲染前完成）：
 - 代码写完先跑 check，修掉全部报错与对比度问题。
@@ -651,6 +681,9 @@ const selfReviewSection = `
   7. 有没有一帧蹦出、跳变或闪烁；入场前是否有预备、到位后是否有回落与稳定；
   8. 是否全程同一速度、同一条缓动曲线；几个元素是否在同一帧、以同一幅度齐动（应当错开先后、主次分明）；
   9. 上一个信息点读完之前，下一个是否已经开始抢视线。
+- 画面文字对账：把截图里出现的每个数字（含百分比、年份、版本号与单位）、型号、产品名、人名和引语逐条对回本镜头的字幕与文本：
+  10. 找不到出处的事实性内容一律删掉，不得补充、换算或改写；图表的刻度与比例按出处数值画，出处只有定性描述时不画带刻度的图表；
+  11. 纯装饰的读数（HUD 刻度、时间码、坐标）可以保留，但不得带有会被读成事实的标签或单位（如「准确率 98.7%」）。
 - 自查量下限：每个阶段的稳定期至少一张静帧，每个关键动作与切换至少一组连续帧。
 - 发现问题就改代码，改完重新截图确认。至少完成一轮「截图 → 修改 → 再截图」；确认无问题后才正式 render。
 `

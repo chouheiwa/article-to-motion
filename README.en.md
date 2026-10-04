@@ -202,7 +202,8 @@ am validate reads
 am audio check --audio production/audio/voice.wav --srt production/audio/voice.srt
 
 # Whole-film review: audio/video stream lengths, total frames vs. the scene sum, frames at
-# every cut, per-scene contact sheets, and a frame-by-frame strip at every cut
+# every cut, per-scene contact sheets, and a frame-by-frame strip at every cut; with an audio
+# track it also measures integrated loudness and true peak, hinting when they miss frame.md
 am review final.mp4 --scenes scenes/ --out production/review
 
 am archive --dry-run

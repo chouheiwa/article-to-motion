@@ -22,6 +22,14 @@ type Prober interface {
 	CountFrames(path string) (int, error)
 	FrameStats(path string, atSeconds float64) (mediaprobe.FrameStats, error)
 	ContactSheet(path string, atSeconds []float64, columns, thumbWidth int, dest string) error
+	MeasureProgramLoudness(path string) (mediaprobe.ProgramLoudness, error)
+}
+
+// LoudnessTarget 是成片混音的响度目标，来自 frame.md 的 audio 块。
+type LoudnessTarget struct {
+	IntegratedLUFS float64
+	Tolerance      float64
+	TruePeakMax    float64
 }
 
 // SeamFrames 是交界条带在切点两侧各取的帧数：30fps 下前后各 0.2 秒，正好覆盖
@@ -42,6 +50,8 @@ type Options struct {
 	OutDir   string
 	// Silent 断言成片没有音轨（只拼接未混音的交付），不做音画比对。
 	Silent bool
+	// Loudness 为 nil 时只记录实测值，不做比对。
+	Loudness *LoudnessTarget
 	// SyncTolerance 是音视频流时长允许的差值（秒）。
 	SyncTolerance float64
 	// Every 是没有镜头信息时联系表的取帧间隔（秒）。
@@ -83,10 +93,12 @@ type Report struct {
 	Media          mediaprobe.Media `json:"media"`
 	ExpectedFrames int              `json:"expected_frames,omitempty"`
 	CountedFrames  int              `json:"counted_frames,omitempty"`
-	Problems       []string         `json:"problems"`
-	Hints          []string         `json:"hints,omitempty"`
-	Cuts           []Cut            `json:"cuts,omitempty"`
-	Sheets         []Sheet          `json:"sheets"`
+	// Loudness 是解码成片后实测的响度；没有音轨时为空。
+	Loudness *mediaprobe.ProgramLoudness `json:"loudness,omitempty"`
+	Problems []string                    `json:"problems"`
+	Hints    []string                    `json:"hints,omitempty"`
+	Cuts     []Cut                       `json:"cuts,omitempty"`
+	Sheets   []Sheet                     `json:"sheets"`
 	// Seams 是每个镜头交界的逐帧条带，切点在第 SeamFrames+1 格。
 	Seams []Sheet `json:"seams,omitempty"`
 }
@@ -155,6 +167,11 @@ func Run(p Prober, opts Options) (Report, error) {
 		}
 	} else {
 		checkSync(&report, media, opts.SyncTolerance)
+		if media.Audio != nil {
+			if err := checkLoudness(p, &report, opts); err != nil {
+				return Report{}, err
+			}
+		}
 	}
 	// 帧数总要实测：联系表的取帧上限只能信解码出的帧数。容器时长取的是最长
 	// 的那条流，音轨比画面长时按它取帧会越过末帧，ffmpeg 返回成功却什么都不写。
@@ -195,6 +212,35 @@ func checkSync(report *Report, media mediaprobe.Media, tolerance float64) {
 			"音画时长不一致：视频 %.3f 秒，音频 %.3f 秒，相差 %.3f 秒（容差 %.3f）",
 			video, audio, diff, tolerance))
 	}
+}
+
+// checkLoudness 量成片的积分响度与真峰，与 frame.md 的目标比对。
+//
+// 结论只进 Hints：平台各有自己的响度规范，frame.md 的数是缺省建议而不是交付
+// 硬门槛；而且响度偏了要回混音那一步改，重跑复查得到的仍是同一个数。
+// 真峰超标例外地值得点名「先查码率」：AAC 编解码会把采样之间的峰值抬上去，
+// 混音导出的 WAV 达标不代表成片达标。
+func checkLoudness(p Prober, report *Report, opts Options) error {
+	measured, err := p.MeasureProgramLoudness(opts.Video)
+	if err != nil {
+		return err
+	}
+	report.Loudness = &measured
+	target := opts.Loudness
+	if target == nil {
+		return nil
+	}
+	if diff := measured.IntegratedLUFS - target.IntegratedLUFS; math.Abs(diff) > target.Tolerance {
+		report.Hints = append(report.Hints, fmt.Sprintf(
+			"成片积分响度 %.1f LUFS，偏离目标 %.1f LUFS 超过 ±%.1f：回混音阶段调整，不要在成片上再叠一次规范化",
+			measured.IntegratedLUFS, target.IntegratedLUFS, target.Tolerance))
+	}
+	if measured.TruePeakDBTP > target.TruePeakMax {
+		report.Hints = append(report.Hints, fmt.Sprintf(
+			"成片真峰 %.1f dBTP，高于上限 %.1f dBTP：先确认 AAC 码率不低于 384k（低码率会把采样间峰值抬高），再在混音里压限",
+			measured.TruePeakDBTP, target.TruePeakMax))
+	}
+	return nil
 }
 
 // checkFrames 把精确解码出的总帧数与各镜头帧数之和比对。

@@ -19,6 +19,8 @@ type fakeProber struct {
 	sheets   [][]float64
 	columns  []int
 	countErr error
+	loudness mediaprobe.ProgramLoudness
+	measured int
 }
 
 func (f *fakeProber) Probe(string) (mediaprobe.Media, error) { return f.media, nil }
@@ -28,6 +30,10 @@ func (f *fakeProber) FrameStats(_ string, at float64) (mediaprobe.FrameStats, er
 		return mediaprobe.FrameStats{AtSeconds: at, Mean: 0, StdDev: 0}, nil
 	}
 	return mediaprobe.FrameStats{AtSeconds: at, Mean: 100, StdDev: 40}, nil
+}
+func (f *fakeProber) MeasureProgramLoudness(string) (mediaprobe.ProgramLoudness, error) {
+	f.measured++
+	return f.loudness, nil
 }
 func (f *fakeProber) ContactSheet(_ string, points []float64, columns, _ int, _ string) error {
 	f.sheets = append(f.sheets, points)
@@ -237,5 +243,47 @@ func TestSilentFilm(t *testing.T) {
 	report, _ = Run(&fakeProber{media: media(4, 4, true), frames: 120}, Options{Video: "x", FPS: 30, Segments: segments(), Silent: true})
 	if report.OK {
 		t.Fatal("按静音复查时出现音轨应判不合格")
+	}
+}
+
+// 响度只进 hints：偏离目标不改变 OK。
+func TestLoudnessOutsideTargetIsHintOnly(t *testing.T) {
+	p := &fakeProber{media: media(4, 4, true), frames: 120, loudness: mediaprobe.ProgramLoudness{IntegratedLUFS: -11.2, TruePeakDBTP: 0.4, RangeLU: 3}}
+	target := &LoudnessTarget{IntegratedLUFS: -16, Tolerance: 1, TruePeakMax: -1}
+	report, err := Run(p, Options{Video: "final.mp4", FPS: 30, OutDir: "out", Loudness: target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.OK || report.Loudness == nil || report.Loudness.TruePeakDBTP != 0.4 {
+		t.Fatalf("响度偏离不应判不合格，且实测值要写进报告：%+v", report)
+	}
+	joined := strings.Join(report.Hints, "\n")
+	if !strings.Contains(joined, "-11.2 LUFS") || !strings.Contains(joined, "0.4 dBTP") || !strings.Contains(joined, "384k") {
+		t.Fatalf("应分别提示积分响度与真峰：%v", report.Hints)
+	}
+}
+
+func TestLoudnessWithinTargetAddsNoHint(t *testing.T) {
+	p := &fakeProber{media: media(4, 4, true), frames: 120, loudness: mediaprobe.ProgramLoudness{IntegratedLUFS: -16.6, TruePeakDBTP: -1.2}}
+	report, err := Run(p, Options{Video: "final.mp4", FPS: 30, OutDir: "out", Loudness: &LoudnessTarget{IntegratedLUFS: -16, Tolerance: 1, TruePeakMax: -1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Hints) != 0 {
+		t.Fatalf("达标时不应有提示：%v", report.Hints)
+	}
+}
+
+// 静音交付与没有目标时：前者不量，后者只记录不比对。
+func TestLoudnessSkippedWhenSilentAndUncomparedWithoutTarget(t *testing.T) {
+	silent := &fakeProber{media: media(4, 0, false), frames: 120}
+	report, err := Run(silent, Options{Video: "final.mp4", FPS: 30, OutDir: "out", Silent: true})
+	if err != nil || silent.measured != 0 || report.Loudness != nil {
+		t.Fatalf("静音交付不应测响度：%+v, %v", report, err)
+	}
+	loud := &fakeProber{media: media(4, 4, true), frames: 120, loudness: mediaprobe.ProgramLoudness{IntegratedLUFS: -8, TruePeakDBTP: 1}}
+	report, err = Run(loud, Options{Video: "final.mp4", FPS: 30, OutDir: "out"})
+	if err != nil || report.Loudness == nil || len(report.Hints) != 0 {
+		t.Fatalf("没有目标时只记录实测值：%+v, %v", report, err)
 	}
 }

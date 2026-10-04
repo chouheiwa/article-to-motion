@@ -50,3 +50,38 @@ func TestLoudnessRejectsBadWindowAndInput(t *testing.T) {
 		t.Errorf("rmsToDB(0) = %v", got)
 	}
 }
+
+func TestParseLoudnormTakesLastJSONBlockAndFloorsSilence(t *testing.T) {
+	log := "[Parsed_loudnorm_0 @ 0x1] \n{\n\t\"input_i\" : \"-inf\",\n\t\"input_tp\" : \"-inf\",\n\t\"input_lra\" : \"0.00\"\n}\nsize=N/A time=00:00:02.00\n"
+	got, err := parseLoudnorm("Metadata: {encoder}\n" + log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IntegratedLUFS != SilenceFloorDB || got.TruePeakDBTP != SilenceFloorDB || got.RangeLU != 0 {
+		t.Fatalf("静音应记为地板值：%+v", got)
+	}
+	for _, bad := range []string{"no json here", `{"input_i":"loud","input_tp":"-1","input_lra":"1"}`, `{"input_i":"nan","input_tp":"-1","input_lra":"1"}`} {
+		if _, err := parseLoudnorm(bad); err == nil {
+			t.Fatalf("应当拒绝：%s", bad)
+		}
+	}
+}
+
+// TestMeasureProgramLoudnessOnEncodedTone：编码后的正弦能量稳定，积分响度与
+// 真峰都应落在有限值上，且真峰高于积分响度。
+func TestMeasureProgramLoudnessOnEncodedTone(t *testing.T) {
+	tc := toolchain(t)
+	path := filepath.Join(t.TempDir(), "tone.m4a")
+	cmd := exec.Command(ffmpegFor(t), "-v", "error", "-y",
+		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3", "-c:a", "aac", path)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("生成音频失败：%v\n%s", err, output)
+	}
+	got, err := tc.MeasureProgramLoudness(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IntegratedLUFS < -30 || got.IntegratedLUFS > -15 || got.TruePeakDBTP <= got.IntegratedLUFS || got.TruePeakDBTP > 0 {
+		t.Fatalf("实测值不合理：%+v", got)
+	}
+}

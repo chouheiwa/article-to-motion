@@ -231,7 +231,8 @@ am validate reads
 
 am audio check --audio production/audio/voice.wav --srt production/audio/voice.srt
 
-# 整片复查：音画时长、总帧数与镜头帧数之和、镜头交界帧，按镜头生成联系表，每个交界出一张逐帧条带
+# 整片复查：音画时长、总帧数与镜头帧数之和、镜头交界帧，按镜头生成联系表，每个交界出一张逐帧条带；
+# 有音轨时实测成片积分响度与真峰，偏离 frame.md 目标只作提示
 am review final.mp4 --scenes scenes/ --out production/review
 
 am archive --dry-run

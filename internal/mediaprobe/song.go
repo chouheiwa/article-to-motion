@@ -39,6 +39,11 @@ func (t Toolchain) songCommand(ctx context.Context, dest string, args ...string)
 	return os.Rename(name, dest)
 }
 
+// songAACBitrate 显式给出，不吃 ffmpeg 原生 aac 的缺省 128k：瞬态密集的音乐在
+// 低码率下编解码一趟，采样之间的峰值能抬高 3 dB 以上，波形文件达标的混音在
+// 成片里顶过 0 dBFS。am review 量的是解码后的真峰，会把这种情况报出来。
+const songAACBitrate = "384k"
+
 // MuxSong accepts an exact-frame silent master. Only the sub-frame tail is
 // padded; no video scaling, retiming, BGM or speech sidechain is available.
 func (t Toolchain) MuxSong(ctx context.Context, video, audio, dest string, duration float64, fps int) error {
@@ -69,7 +74,7 @@ func (t Toolchain) MuxSong(ctx context.Context, video, audio, dest string, durat
 		return fmt.Errorf("歌曲静音母版不合格：%v", report.Problems)
 	}
 	filter := "apad=pad_dur=" + strconv.FormatFloat(math.Max(0, target-duration), 'f', 9, 64) + ",atrim=duration=" + strconv.FormatFloat(target, 'f', 9, 64)
-	if e = t.songCommand(ctx, dest, "-i", video, "-i", audio, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-af", filter, "-c:a", "aac", "-ar", "48000", "-ac", "2", "-movflags", "+faststart"); e != nil {
+	if e = t.songCommand(ctx, dest, "-i", video, "-i", audio, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-af", filter, "-c:a", "aac", "-b:a", songAACBitrate, "-ar", "48000", "-ac", "2", "-movflags", "+faststart"); e != nil {
 		return e
 	}
 	report, e = t.Verify(dest, VerifyOptions{Spec: Spec{FPS: fps, Frames: frames, DurationSeconds: target, Tolerance: 1.0 / float64(fps), Audio: AudioPresent, SampleRate: 48000, Channels: 2}, ExactFrames: true, Decode: true})

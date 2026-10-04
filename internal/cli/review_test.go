@@ -151,3 +151,33 @@ func TestParseStripCapsLength(t *testing.T) {
 		t.Fatalf("超过 90 帧应报错：%v", err)
 	}
 }
+
+// 项目里有 frame.md 时按它的 audio 目标比对；正弦测试音约 -21 LUFS，
+// 偏离 -16±1 只进提示，退出码仍为 0，实测值写进报告。
+func TestReviewCommandReportsLoudnessAgainstFrameTargets(t *testing.T) {
+	requireFFmpeg(t)
+	root := t.TempDir()
+	frame := "---\nstyle_id: x\ncanvas:\n  width_px: 320\n  height_px: 240\n  fps: 30\naudio:\n  final_integrated_lufs: -16\n  final_lufs_tolerance: 1\n  true_peak_max_dbtp: -1\n---\n"
+	os.WriteFile(filepath.Join(root, "frame.md"), []byte(frame), 0o644)
+	film := filepath.Join(root, "final.mp4")
+	makeFilm(t, film, "2", "2")
+	outDir := filepath.Join(root, "review")
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{"review", film, "--project-root", root, "--out", outDir, "--thumb-width", "64"}, &out, &errOut); code != 0 {
+		t.Fatalf("响度偏离不应让复查失败：%d %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "积分响度") {
+		t.Errorf("应提示积分响度偏离：%s", out.String())
+	}
+	body, _ := os.ReadFile(filepath.Join(outDir, "review.json"))
+	if !strings.Contains(string(body), `"integrated_lufs"`) {
+		t.Errorf("报告应包含实测响度：%s", body)
+	}
+
+	// frame.md 读不出目标时报错，不静默跳过。
+	os.WriteFile(filepath.Join(root, "frame.md"), []byte("---\nstyle_id: x\ncanvas:\n  width_px: 320\n  height_px: 240\n  fps: 30\n---\n"), 0o644)
+	errOut.Reset()
+	if code := Execute([]string{"review", film, "--project-root", root, "--out", outDir}, &out, &errOut); code != 1 || !strings.Contains(errOut.String(), "响度目标") {
+		t.Errorf("缺响度目标应报错：%d %s", code, errOut.String())
+	}
+}
