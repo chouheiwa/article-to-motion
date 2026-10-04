@@ -372,3 +372,13 @@ func TestProductionPromptCarriesCustomStyleStage(t *testing.T) {
 		}
 	}
 }
+
+// 各平台封面比例不同（抖音 4:3 + 3:4、B 站 16:10……）；这一节被删掉，交付物就只剩第 0 帧。
+func TestProductionPromptRequiresPlatformCovers(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{"douyin", "xiaohongshu", "channels", "bilibili", "zhihu", "16:10", "安全区", "covers/src/", "cover.images", "designed_image"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 的平台封面一节缺少 %q", want)
+		}
+	}
+}

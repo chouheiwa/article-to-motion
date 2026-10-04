@@ -23,6 +23,7 @@ cover:
   frame: 0
   source_type: unconfirmed
   source_path: ""
+  images: []
 copy:
   primary_title: ""
   introduction: ""

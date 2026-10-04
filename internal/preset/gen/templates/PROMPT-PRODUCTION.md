@@ -613,6 +613,28 @@ am review <候选成片> --scenes scenes/ --out production/review
 
 ## 第十二阶段：刷新发布配置
 
+### 平台封面
+
+交付前按发布平台另做封面图。这些是上传时单独提交的封面，不能拿成片截帧代替：截帧的构图是按 {{CANVAS}} 排的，换成另一个比例必然裁掉标题或主体。
+
+| 平台 | `platform` | 要出的封面 | 推荐尺寸（宽 × 高） | 构图要点 |
+|---|---|---|---|---|
+| 抖音 | `douyin` | 横 4:3 + 竖 3:4，两张都要 | 宽 1440、高 1080；宽 1080、高 1440 | 竖封面用于个人主页与双列信息流 |
+| 小红书 | `xiaohongshu` | 竖 3:4（也接受 1:1、4:3） | 宽 1080、高 1440 | 其他比例会被裁成 3:4 或 4:3 |
+| 微信视频号 | `channels` | 竖 3:4（横版视频可加 16:9） | 宽 1080、高 1440 | 主体与标题集中在中间 |
+| B 站 | `bilibili` | 横 16:10 | 宽 1920、高 1200 | 各展示位会再裁成 16:9 或 4:3：标题与主体放进居中的宽 1600、高 1080 安全区 |
+| 知乎 | `zhihu` | 横 16:10 | 宽 1920、高 1200 | 同 B 站 |
+
+同一张 3:4 竖封面可以同时登记给抖音、小红书与视频号；B 站与知乎的 16:10 必须单独构图，不能拿 4:3 拉伸。
+
+1. 封面沿用本片的视觉规范与画面主体：同一套配色、字体与角色/场景，定格在全片最有戏剧性、最能说明主题的一刻。标题用已确认的封面标题，必要时加一到两个短钩子（数字、反差），不新增片中没有的事实。
+2. 文件命名为 `covers/<平台>-<宽>x<高>.png`，例如 `covers/douyin-1440x1080.png`、`covers/bilibili-1920x1200.png`。源文件放在 `covers/src/<同名>/index.html`，各自是一个 `data-duration` 为 1 秒的 HyperFrames 合成。字体与脚本复制进各自目录、用目录内路径引用，不得用 `../` 引用目录外的文件，否则字体与脚本不会被加载。
+3. 每种比例分别构图，不要把一张缩放成另一张：横版通常文字在左、主体在右，竖版通常标题在上、主体在中、钩子在下。标题与主体都不得出画，文字不得压在主体上。
+4. 每张先跑 `npx --yes hyperframes@{{HYPERFRAMES_VERSION}} check covers/src/<目录>` 直到通过，再用 `snapshot --at 0.5` 出图，复制为上面的文件名，打开看一遍。
+5. 在 `publish.md` 的 `cover.images` 里逐张登记 `{platform, ratio, path, width_px, height_px}`，`cover.source_type` 写 `designed_image`；「封面文字」章节写出封面标题并列出每张图的路径。`am validate publish` 会按上表核对平台是否接受该比例、实测尺寸与比例、短边不小于 1080，并在 `ready` 时检查发布平台要的封面是否齐全。封面预览（`manual_checks.cover_preview`）仍需人工在平台上确认。
+
+### 发布配置
+
 最终交付后刷新根目录 `publish.md`：
 
 - 用 FFprobe、完整解码和 SHA-256 实测 `final.mp4`，填入实际规格和最终哈希；新视频与新哈希验证完成后才把 `video.replacement_in_progress` 恢复为 `false`。
@@ -628,6 +650,7 @@ am review <候选成片> --scenes scenes/ --out production/review
 
 - 根目录 `final.mp4`。
 - 根目录 `publish.md`，包含最终发布文案、成片 SHA-256、证据索引、署名和人工待办。
+- `covers/` 下按发布平台规格出的封面图（抖音横 4:3 + 竖 3:4、小红书与视频号竖 3:4、B 站与知乎横 16:10）及其 `covers/src/` 源文件，已登记进 `publish.md` 的 `cover.images`。
 - 最终配音对应的 `transcription-production.srt`。
 - `production/script-final.md` 和修改记录。
 - `production/input-manifest.json`、制作配置和时间报告。
@@ -637,7 +660,7 @@ am review <候选成片> --scenes scenes/ --out production/review
 - 失败镜头的编号、失败阶段、关键日志和建议重试方式。
 - 发布所需的音乐或素材署名文字。
 
-完成时汇报最终成片路径、`publish.md` 路径、时长、分辨率、帧率、音频规格、SHA-256、发布状态、所有检查结果，以及仍需人工完成的发布前事项。
+完成时汇报最终成片路径、`publish.md` 路径、封面图路径、时长、分辨率、帧率、音频规格、SHA-256、发布状态、所有检查结果，以及仍需人工完成的发布前事项。
 
 ## 第十三阶段：项目收尾与归档
 

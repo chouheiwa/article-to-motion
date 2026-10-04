@@ -75,20 +75,31 @@ func safeRelative(root string, value any) error {
 	if err != nil {
 		return err
 	}
-	resolvedTarget, resolveErr := filepath.EvalSymlinks(target)
-	if resolveErr != nil {
-		resolvedParent, parentErr := filepath.EvalSymlinks(filepath.Dir(target))
-		if parentErr == nil {
-			resolvedTarget = filepath.Join(resolvedParent, filepath.Base(target))
-		} else {
-			resolvedTarget = target
-		}
-	}
+	resolvedTarget := resolveExisting(target)
 	rel, err := filepath.Rel(resolvedRoot, resolvedTarget)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("路径逃出项目目录：%s", path)
 	}
 	return nil
+}
+
+// resolveExisting 解析路径里已经存在的那一段，再接上还不存在的部分。
+//
+// 只解析直接父目录不够：目标在一个还没建出来的子目录里时（例如还没出图的
+// covers/），父目录解析失败，路径就停留在未解析的形态；而项目根是解析过的
+// （macOS 的临时目录 /var 实际是 /private/var），两者一比就误判成逃出项目。
+func resolveExisting(target string) string {
+	rest := ""
+	for dir := target; ; dir = filepath.Dir(dir) {
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(resolved, rest)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return target
+		}
+		rest = filepath.Join(filepath.Base(dir), rest)
+	}
 }
 
 func Publish(path, projectRoot string) (map[string]any, error) {
@@ -136,6 +147,9 @@ func Publish(path, projectRoot string) (map[string]any, error) {
 				return nil, err
 			}
 		}
+	}
+	if err := validateCoverImages(projectRoot, data); err != nil {
+		return nil, err
 	}
 	for _, heading := range []string{"## 发布状态", "## 发布平台", "## 主标题", "## 发布介绍", "## 话题标签", "## 封面文字", "## 素材署名", "## 成片规格与 SHA-256", "## 证据索引", "## 发布前人工检查", "## 未完成事项"} {
 		if !strings.Contains(body, heading) {

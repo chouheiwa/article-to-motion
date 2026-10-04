@@ -176,6 +176,20 @@ Besides canvas, frame rate, duration, and silence, the scene output check scans 
 
 `am scene run-all` dispatches the longest scenes first so a long scene at the end of the timeline does not stretch the whole batch on its own. When rendering in parallel it gives each scene `(CPU cores - 2) / jobs` HyperFrames `--workers`, so concurrent renders do not each size themselves for the whole machine and oversubscribe CPU and memory.
 
+## Platform covers
+
+Besides the video, the deliverables include cover images made for each publishing platform. Each is composed on its own from the film's style and subject, never cropped from a video frame or scaled from another cover. Sources live in `covers/src/`, each a 1-second HyperFrames composition that passes `check` before `snapshot` exports `covers/<platform>-<W>x<H>.png`.
+
+| Platform | `platform` | Cover ratio | Suggested size |
+|---|---|---|---|
+| Douyin | `douyin` | landscape 4:3 + portrait 3:4 (both required) | 1440×1080, 1080×1440 |
+| Xiaohongshu | `xiaohongshu` | portrait 3:4 (1:1 and 4:3 also accepted) | 1080×1440 |
+| WeChat Channels | `channels` | portrait 3:4 (16:9 also accepted) | 1080×1440 |
+| Bilibili | `bilibili` | landscape 16:10, title inside the centered 1600×1080 safe area | 1920×1200 |
+| Zhihu | `zhihu` | landscape 16:10 | 1920×1200 |
+
+Covers are listed under `cover.images` in `publish.md` (`{platform, ratio, path, width_px, height_px}`); one 3:4 image may be listed for several platforms. `am validate publish` checks each entry against the table: the platform accepts the ratio, the file is inside the project and is PNG or JPEG, its measured size matches the declaration and the ratio exactly, and the short side is at least 1080 px. With status `ready`, every cover the `platform` requires must be present. The table reflects a 2026-10 survey; most official help pages require sign-in, and the Zhihu entry rests on a single source.
+
 ## Validate, archive, and develop
 
 ```bash
