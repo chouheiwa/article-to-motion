@@ -382,3 +382,50 @@ func TestProductionPromptRequiresPlatformCovers(t *testing.T) {
 		}
 	}
 }
+
+// 整片处理方案是分镜与每个镜头 prompt.md 的上游；它若开始重新定义配色和字体，
+// 就会和 frame.md 争夺视觉一致性的唯一来源。
+func TestProductionPromptCarriesTreatment(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{
+		"### 整片处理方案",
+		"production/treatment.md",
+		"钩子—揭示—收束",
+		"持续物件",
+		"配色、字体、安全区和版式骨架仍由 `frame.md` 管，`treatment.md` 不得重新定义它们",
+		"先改 `treatment.md`",
+		"- `production/treatment.md` 整片处理方案",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 的整片处理方案缺少 %q", want)
+		}
+	}
+	if strings.Index(body, "### 整片处理方案") > strings.Index(body, "## 第三阶段") {
+		t.Error("整片处理方案必须在第三阶段（TTS）之前")
+	}
+}
+
+// 镜头各自渲染、互相看不到，跨镜头交接只能靠 prompt.md 里写明的入场与出场状态，
+// 整片复查要拿 seam-NN.png 对这两段约定。
+func TestProductionPromptDeclaresSceneHandoff(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{
+		"在 `prompt.md` 中写明镜头交接：入场状态",
+		"出场状态（最后一帧留给下一镜头",
+		"声明的出场状态与入场状态",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 缺少镜头交接约定 %q", want)
+		}
+	}
+}
+
+// amix 默认按输入路数压低每一路，混音偏小后只能靠响度规范化硬拉。
+func TestProductionPromptMixesWithoutAmixNormalize(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{"`amix`", "`normalize=0`", "`event_id`", "`phrase_id`"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 的声音设计缺少 %q", want)
+		}
+	}
+}
