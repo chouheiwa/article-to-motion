@@ -123,6 +123,13 @@ am scene run scenes/scene-001
 am scene run-all scenes/ --jobs 3 --retries 2 --report-json production/run-report.json
 ```
 
+Narration alignment is not mapped back by hand. In the final script `production/script-final.md`, mark text that is displayed differently from how it is spoken with `<display|spoken>` (for example `<2025年|二零二五年>`), and protected phrases with `@{phrase-id}…@{/phrase-id}`. `am align text` writes the spoken text sent to TTS and the forced aligner; `am align build` matches the aligner's per-character output back to the script and writes `voice.srt`, `phrase-timeline.json` and an alignment report. A protected phrase with characters missing from the alignment (skipped by TTS or lost by the aligner) is an error that names the script line and column; deliberate boundary fixes go in `production/phrase-adjust.json`, each with a reason, layered over the measured data:
+
+```bash
+am align text                 # → production/audio/tts-text.txt
+am align build --fps 30       # reads production/audio/align.json; segments: --align align-02.json@312.48
+```
+
 Scene durations are not computed by hand. The scene plan `production/scene-plan.json` only says which subtitle or phrase each scene starts on and which side of a pause the cut falls on; `am scene cues` derives whole-frame ranges and writes each scene's `duration_seconds` and `timing` block:
 
 ```bash

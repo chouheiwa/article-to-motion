@@ -147,6 +147,13 @@ am scene run scenes/scene-001
 am scene run-all scenes/ --jobs 3 --retries 2 --report-json production/run-report.json
 ```
 
+配音对齐不手工映射。终稿 `production/script-final.md` 里用 `<显示|朗读>` 标出显示与朗读不同的地方（如 `<2025年|二零二五年>`），用 `@{短语编号}…@{/短语编号}` 标出受保护短语；`am align text` 生成送进 TTS 与强制对齐的朗读文本，`am align build` 把对齐器的逐字结果匹配回终稿，写出 `voice.srt`、`phrase-timeline.json` 与对齐报告。受保护短语里有字对不上（TTS 漏读或对齐丢了）时报错并点出终稿行列号；确需修正短语边界时写进 `production/phrase-adjust.json`，每条带理由，叠加在测量结果上：
+
+```bash
+am align text                 # → production/audio/tts-text.txt
+am align build --fps 30       # 读 production/audio/align.json，分段时 --align align-02.json@312.48
+```
+
 镜头时长不手算。分镜计划 `production/scene-plan.json` 只写每个镜头从哪条字幕或哪个短语开始、切在空白的哪一侧，由 `am scene cues` 推出整数帧区间，写进各镜头的 `duration_seconds` 与 `timing` 块：
 
 ```bash

@@ -89,6 +89,9 @@
 - 信息密集段落之间预留呼吸、画面展示和转场空间。
 - 如果原稿缺少“这条视频要讲什么”的开场，补充约 12–15 秒的开场：先提出问题或冲突，再说明本视频将完成的实验、演示或验证。
 - 开场不能重复正文，也不能提前泄露全部结论。
+- 显示与朗读不同的地方直接在稿件里标出，写成 `<显示|朗读>`：四位年份 `<2025年|二零二五年>`、需要按字母念的缩写 `<API|A P I>`、改写成能读对的英文。只读不显示写 `<|朗读>`，只显示不读写 `<显示|>`。字幕显示左边，配音和对齐用右边，两边由 `am align` 对回，不再另记替换清单。
+- 会分别出现在画面上的概念、条件、结论和专有名词标成受保护短语：`@{短语编号}原文@{/短语编号}`，编号用小写字母、数字、`-` 或 `_`。第四阶段的短语时间轴只从这些标记生成。
+- 以 `#` 开头的行是标题，不进配音。字面上的 `<`、`@`、`|`、`\` 前面加 `\` 转义。
 
 同时生成 `production/script-change-log.md`，说明删改、重排和新增开场的位置。涉及观点改变或新增事实时必须等待确认；仅做口语化、标点和明显断句修复时可以继续。
 
@@ -184,7 +187,7 @@ TTS 工具由 `article-to-motion.conf`（或环境变量 `TTS_PROVIDER`）决定
 - 优先按完整语义段落调用 TTS，避免按字幕行逐条生成造成语调碎裂。
 - 正式生成前，先扫描终稿全文，把容易误读的英文单词、英文缩写、产品名、模型名、专有名词和数字逐一列出并确定预期读音，再写入对应 TTS 的发音控制；同一词出现多次也要统一。不要靠生成后试听再补。
 - 四位数年份一律逐位读：`1972 年` 读「一九七二年」，`2025 年` 读「二零二五年」，`2026 年 2 月` 读「二零二六年二月」，`1970 年代` 读「一九七零年代」；不得读成「一千九百七十二年」「两千零二十五年」。扫描时把全文每一个四位年份都列入发音控制，不要交给 TTS 自行判断：同一音色对不同年份、不同上下文的处理并不一致。其余数量数字（`16 个`、`815 字`、`64KB`）仍按数值读。
-- 把实际送进 TTS 的完整文本（已做年份、读音等改写）保存为 `production/audio/tts-text.txt`，第四阶段强制对齐要用它。
+- 用 `am align text` 从终稿生成 `production/audio/tts-text.txt`：标记已换成朗读写法，`#` 标题行已去掉。送进 TTS 的就是这份文本，第四阶段强制对齐也用它；各路径的发音控制（`--pronunciation`、SSML）只处理文本改写也读不准的词。语法写错时它会报出行号和列号。
 - 保留原始请求命令（去掉密钥）、CLI 返回的元数据（时长、采样率、大小）、原始音频和时间戳文件，写入生成报告。
 - 不得手工伪造服务返回的时间戳。
 
@@ -212,19 +215,19 @@ TTS 工具由 `article-to-motion.conf`（或环境变量 `TTS_PROVIDER`）决定
 - 用 SSML `<phoneme>` 钉住上面的易误读词（需加 `--enable-ssml`）。`alphabet` 必须匹配词的语言：中文词用 `py`（拼音），英文词必须用 `ipa`（国际音标）——用拼音去近似英文只会得到中式英文。
   - 英文词用 `alphabet="ipa"`，例如 `<phoneme alphabet="ipa" ph="ˈmɪniˌmæks">MiniMax</phoneme>`、`<phoneme alphabet="ipa" ph="ˌeɪˈaɪ">AI</phoneme>`。
   - 中文多音字用 `alphabet="py"`，例如 `<phoneme alphabet="py" ph="he2">和</phoneme>`。
-- 四位年份：在送进 TTS 的文本里直接写成逐位汉字（`2025 年` 写「二零二五年」），不依赖 SSML 数字读法。字幕仍显示原文的阿拉伯数字：从 ASR 结果重建 `voice.srt` 时，按终稿把这些年份换回原写法，并在生成报告里列出替换清单。
+- 四位年份：在送进 TTS 的文本里直接写成逐位汉字（`2025 年` 写「二零二五年」），不依赖 SSML 数字读法。字幕仍显示原文的阿拉伯数字：年份在终稿里写成 `<2025年|二零二五年>`，换回原写法由第四阶段的 `am align build` 完成。
 
 **Edge 固定参数**
 
 - 命令：`edge-tts -v <voiceId> --rate=<±N%> -f production/audio/tts-text.txt --write-media production/audio/voice.mp3 --write-subtitles production/audio/edge.srt`。语速写成百分比，负数必须用等号连写（`--rate=-2%`），否则被当成另一个参数。
 - 只输出 24kHz 单声道 MP3，用 FFmpeg 转成 `voice.wav`（48kHz 双声道）供后续混音。
-- 不支持自定义 SSML，发音控制只能改写送进 TTS 的文本：年份写成逐位汉字，易误读的英文写成能读对的形式；字幕仍显示终稿原文，替换清单写进生成报告。
+- 不支持自定义 SSML，发音控制只能改写送进 TTS 的文本：年份写成逐位汉字，易误读的英文写成能读对的形式，一律写成终稿里的 `<显示|朗读>` 标记；字幕显示终稿原文由 `am align build` 保证。
 - `edge.srt` 是句级时间戳，实测起点比发声早约 0.1–0.2 秒，结尾还把句间停顿算进去。它只能做参考，`voice.srt` 必须由第四阶段的强制对齐生成。
 
 **ElevenLabs 固定参数**
 
 - 用带时间戳的合成命令：`elevenlabs text-to-speech convert_with_timestamps --voice-id <voiceId> --model-id eleven_multilingual_v2 --text "..." --voice-settings.speed <confirmedSpeed> --output-format mp3_44100_128 --format json > production/audio/tts-001.json`。
-- 返回 JSON 里同时有 base64 编码的音频和字级对齐（`alignment` 下的 `characters`、`character_start_times_seconds`、`character_end_times_seconds`）。先打印 JSON 的字段名确认结构再解析：解码音频后转成 `voice.wav`，按字级时间合成句级 `voice.srt`。
+- 返回 JSON 里同时有 base64 编码的音频和字级对齐（`alignment` 下的 `characters`、`character_start_times_seconds`、`character_end_times_seconds`）。先打印 JSON 的字段名确认结构再解析：解码音频后转成 `voice.wav`，把字级时间转成第四阶段的标准对齐结构存成 `production/audio/align.json`，`voice.srt` 由 `am align build` 生成。
 - 数字读法用 `--apply-text-normalization on` 交给服务处理，但四位年份仍在文本里预先写成逐位汉字。
 
 **腾讯云固定参数**
@@ -270,15 +273,15 @@ TTS 工具由 `article-to-motion.conf`（或环境变量 `TTS_PROVIDER`）决定
 
 文稿是现成的，把它逐字对到配音上比语音识别更准，也不会把专有名词识别错。对齐工具由 `ALIGN_PROVIDER` 决定，用 `am config get ALIGN_PROVIDER` 读取：缺省在 Apple Silicon 上是 `mlx`，其余平台是 `funasr`。
 
-送进对齐的文本必须是实际送进 TTS 的那份（年份已写成逐位汉字等），对齐完再按替换清单映射回终稿原文。先用 FFmpeg 把 `voice.wav` 转成 16kHz 单声道的 `production/audio/voice-16k.wav`。
+送进对齐的文本必须是 `am align text` 生成的 `production/audio/tts-text.txt`。对齐结果不手工映射回原文：由 `am align build` 逐字匹配回终稿，生成 `voice.srt` 和短语时间轴（见下文）。先用 FFmpeg 把 `voice.wav` 转成 16kHz 单声道的 `production/audio/voice-16k.wav`。
 
 **`mlx`（Qwen3-ForcedAligner）**
 
 - 安装同 MLX 语音合成（`uv tool install --prerelease=allow mlx-audio`）。
 - 命令：`mlx_audio.stt.generate --model mlx-community/Qwen3-ForcedAligner-0.6B-8bit --audio production/audio/voice-16k.wav --text "$(cat production/audio/tts-text.txt)" --language Chinese --output-path production/audio/align --format json`，结果写到 `production/audio/align.json`（`--output-path` 是不带扩展名的文件路径，不是目录）。
 - `--language Chinese` 必须显式传，缺省是英文。
-- 输出按单字给出开始、结束秒数，粒度约 0.08 秒；标点会被丢掉，按顺序与原文逐字对回。
-- 单次最多 5 分钟音频。更长的配音在句间停顿处切段分别对齐，再按各段起点平移；切点从下面 `am audio check` 报告的 `speech` 区间之间选，不要切在发声中间。
+- 输出按单字给出开始、结束秒数，粒度约 0.08 秒；标点会被丢掉。`am align build` 直接读这份 JSON。
+- 单次最多 5 分钟音频。更长的配音在句间停顿处切段分别对齐，存成 `align-01.json`、`align-02.json`……，交给 `am align build` 时写明各段起点（`--align production/audio/align-02.json@312.48`）；切点从下面 `am audio check` 报告的 `speech` 区间之间选，不要切在发声中间。
 
 **`funasr`（时间戳预测）**
 
@@ -291,9 +294,22 @@ TTS 工具由 `article-to-motion.conf`（或环境变量 `TTS_PROVIDER`）决定
   print(result)
   ```
 
-- 先打印结果确认结构，再按逐字时间戳合成句级 SRT。
+- 先打印结果确认结构，把它原样存成 `production/audio/align.json`。`am align build` 认得 funasr 的 `text` 加 `timestamp`（毫秒）结构。
 
-对齐结果保存为 `production/audio/align.json`（分段对齐时用 `align-NN.json`），并据此生成（或替换）`production/audio/voice.srt`。
+服务自带字级时间戳时（ElevenLabs 的 `alignment`），可以把它转成标准结构 `[{"text": "字", "start": 秒, "end": 秒}, ...]` 存成 `align.json` 代替强制对齐；只有句级时间戳的路径（MiniMax `--subtitles`、百炼 ASR、`edge.srt`）仍要跑强制对齐，句级结果只作参考。
+
+然后由终稿和对齐结果生成 `voice.srt` 与短语时间轴：
+
+```bash
+am align build --fps 30
+```
+
+缺省读 `production/script-final.md` 与 `production/audio/align.json`，写出 `production/audio/voice.srt`、`production/phrase-timeline.json` 和 `production/audio/align-report.json`。它把终稿的每个朗读单元与对齐结果逐字匹配，标出漏读、多读与读错的位置：
+
+- 受保护短语里有字在对齐结果中找不到（TTS 漏读或对齐丢了），或整体匹配率低于 85%，会进 `problems` 并以非 0 退出。先重新合成或检查送进对齐的文本，不要改时间码。
+- 多出来的字、读错的字和置信度低于 0.9 的短语进 `hints`，逐条带终稿行号，试听确认。
+- 确实是对齐器把某个短语的边界判错时，把修正写进 `production/phrase-adjust.json`：`{"schema": 1, "adjustments": [{"phrase_id": "...", "edge": "start", "frame": 63, "reason": "..."}]}`。每条必须写理由；修正只叠加在测量结果上，被修正的短语标为 `adjusted` 并记为已复核。不要直接改 `phrase-timeline.json` 的帧号，下次重跑会被覆盖。
+- 重跑时保留 `phrase-timeline.json` 里已填的 `visible_event_ids` 和 `reviewed`。
 
 **每次得到或改动 `voice.srt` 后，都要用配音本身做一次独立校验：**
 
@@ -309,7 +325,7 @@ am audio check --audio production/audio/voice.wav --srt production/audio/voice.s
 - `transcription-production.srt` 生成后同样跑一次。终稿字幕按可读单元延长停留是允许的，所以它的「结尾停留」提示可以保留，但 `problems` 必须为空。
 
 - 参考 SRT 只用于理解原始内容和大致节奏。没有已录配音时，不把参考时间码当作最终时间码。
-- 以 `production/audio/voice.srt` 的真实时间戳生成 `transcription-production.srt`。MiniMax 由 `--subtitles` 直接产出，百炼由 ASR 识别后转换产出，ElevenLabs 由字级对齐合成；Edge、腾讯云与 MLX 由下面的强制对齐生成。该 SRT 已是毫秒精度的句级时间戳，可直接作为基础，再按可读语义单元微调。
+- 以 `production/audio/voice.srt` 的真实时间戳生成 `transcription-production.srt`。`voice.srt` 由上面的 `am align build` 生成，已是毫秒精度的句级时间戳，可直接作为基础，再按可读语义单元微调。
 - 字幕按可读语义单元切分，不能直接照搬 TTS 请求分段。
   - 复合词、人名、机构名、修饰语与中心词、数量与单位、英文短语不拆到两条字幕或两行里。
   - 不要连续出现很碎的两三字字幕条。
@@ -333,9 +349,9 @@ am audio check --audio production/audio/voice.wav --srt production/audio/voice.s
 
 ### 第四阶段补充：短语级语义时间轴
 
-句级 SRT 只能用于字幕和粗排，不能直接证明一句话内部的视觉顺序。凡一条字幕包含两个以上会分别显示的概念、动作、条件、结论或专有名词，必须依据真实音频执行词级或短语级强制对齐（工具同上，直接复用 `production/audio/align*.json` 的逐字结果），并生成：
+句级 SRT 只能用于字幕和粗排，不能直接证明一句话内部的视觉顺序。凡一条字幕包含两个以上会分别显示的概念、动作、条件、结论或专有名词，必须把这些单位在终稿里标成受保护短语（`@{短语编号}…@{/短语编号}`），由 `am align build` 依据真实音频生成 `production/phrase-timeline.json`，不要手写帧号；再生成 `production/visible-event-inventory.json`：
 
-- `production/phrase-timeline.json`
+- `production/phrase-timeline.json`（`am align build` 产出）
 - `production/visible-event-inventory.json`
 
 两个文件的字段名固定，`am validate reads` 按这些名字读取；帧号一律是全片全局帧。

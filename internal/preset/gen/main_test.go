@@ -429,3 +429,32 @@ func TestProductionPromptMixesWithoutAmixNormalize(t *testing.T) {
 		}
 	}
 }
+
+// TestProductionPromptAlignsWithCode 钉住第四阶段：对齐结果由 am align 映射回终稿，
+// 不再让人按替换清单手工对回、手写短语帧号。
+func TestProductionPromptAlignsWithCode(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{"`am align text`", "am align build", "`<显示|朗读>`", "`@{短语编号}", "phrase-adjust.json"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 的对齐流程缺少 %q", want)
+		}
+	}
+	for _, banned := range []string{"按替换清单映射回终稿原文", "按顺序与原文逐字对回"} {
+		if strings.Contains(body, banned) {
+			t.Errorf("PROMPT-PRODUCTION.md 仍要求手工映射：%q", banned)
+		}
+	}
+}
+
+// TestProductionPromptDerivesSceneDurations 钉住第五、六阶段：镜头时长由 am scene cues 推出。
+func TestProductionPromptDerivesSceneDurations(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{"am scene cues --plan production/scene-plan.json", "`first_subtitle`", "`first_phrase`", "--check", "am-scene.js", "`scene-kit`"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 的镜头时长流程缺少 %q", want)
+		}
+	}
+	if strings.Contains(body, "每个镜头先定帧数，再写 `duration_seconds = 帧数 ÷ 帧率`") {
+		t.Error("PROMPT-PRODUCTION.md 仍要求手算镜头时长")
+	}
+}
