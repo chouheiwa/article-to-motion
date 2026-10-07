@@ -85,6 +85,8 @@ func TestInitializeDeliversSkillTree(t *testing.T) {
 		skillTreeRoot + "/text-to-lottie/LICENSE",
 		skillTreeRoot + "/text-to-lottie/references/lottie-spec-map.md",
 		skillTreeRoot + "/algorithmic-art/" + skillManifest,
+		skillTreeRoot + "/scene-kit/" + skillManifest,
+		skillTreeRoot + "/scene-kit/scene-kit.js",
 	} {
 		if _, err := os.Stat(filepath.Join(target, filepath.FromSlash(name))); err != nil {
 			t.Errorf("项目里缺少 %s：%v", name, err)

@@ -472,3 +472,33 @@ func TestRendererAccessPinsCLIAndOpensSkillDirs(t *testing.T) {
 		t.Errorf("ReadDirs = %v，期望 %v", access.ReadDirs, want)
 	}
 }
+
+// TestSceneKitPromptMakesCaptionsAndLayoutMandatory 守着 scene-kit 存在的理由：
+// 措辞一旦退成「可以用」，渲染器照旧手写字幕与安全区像素，镜头之间字幕各不
+// 相同，库就白装了。复制义务与加载顺序同样是承重的——引用镜头目录外的路径或
+// 先于 am-scene.js 加载，字幕都会静默缺失而渲染照样成功。
+func TestSceneKitPromptMakesCaptionsAndLayoutMandatory(t *testing.T) {
+	for _, dir := range []string{"", filepath.FromSlash("/proj/.agents/skills")} {
+		section := sceneKitPrompt(dir)
+		for _, want := range []string{
+			"强制", "SceneKit.captions", "SceneKit.safeRect", sceneKitLibraryFile,
+			"复制进本镜头目录", "不得手写字幕代码", "先加载镜头目录里的 " + sceneDataFile,
+		} {
+			if !strings.Contains(section, want) {
+				t.Errorf("skillsDir=%q 时，scene-kit 片段缺少 %q：\n%s", dir, want, section)
+			}
+		}
+	}
+}
+
+// TestAnimationPromptDirectsEndStatesAndFollowRelations 钉住两条动效手艺要求：
+// 只盯入场的动画常常落在一个说不清台词论点的终态上；跟随关系不成立（指针没落
+// 在控件上、标签与对象脱节）则是画面自查最容易漏的错。
+func TestAnimationPromptDirectsEndStatesAndFollowRelations(t *testing.T) {
+	section := animationPrompt("")
+	for _, want := range []string{"状态变化", "最终停在什么状态", "论点", "跟随关系", "指针落在它要按的控件上", "标签跟着它标注的对象走"} {
+		if !strings.Contains(section, want) {
+			t.Errorf("动效片段缺少 %q：\n%s", want, section)
+		}
+	}
+}
