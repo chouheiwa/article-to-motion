@@ -58,7 +58,7 @@ const cleanComposition = `<!doctype html>
 // TestCleanCompositionPasses：固定版本的 CDN、注释里提到的禁用 API、
 // 本地字体都不是违规。误判会让人很快不再信任这道门。
 func TestCleanCompositionPasses(t *testing.T) {
-	report := scan(t, map[string]string{"index.html": cleanComposition})
+	report := scan(t, map[string]string{"index.html": cleanComposition, "fonts/noto.woff2": "x"})
 	if !report.OK || len(report.Findings) != 0 {
 		t.Fatalf("干净的合成不应有发现：%v", report.Findings)
 	}
@@ -294,5 +294,40 @@ func TestNonFetchingHrefIsIgnored(t *testing.T) {
 	want := []string{"index.html:remote-font", "index.html:remote-asset"}
 	if got := rules(report.Findings); strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("只有会被加载的 href 才算引用：got %v want %v", got, want)
+	}
+}
+
+func TestFontFaceChecks(t *testing.T) {
+	report := scan(t, map[string]string{
+		"index.html": `<html><head><link rel="stylesheet" href="css/fonts.css"><style>
+@font-face { font-family: "Noto Sans SC"; src: url("assets/fonts/noto-400.woff2"); font-display: block; }
+@font-face { font-family: "Noto Sans SC"; font-weight: 700; src: url("assets/fonts/noto-700.woff2"); font-display: swap; }
+@font-face { font-family: "Inter"; src: local("Inter"), url(assets/fonts/inter.woff2); }
+</style></head><body></body></html>`,
+		"css/fonts.css":               "@font-face { font-family: Mono; src: url('../assets/fonts/mono.woff2'); font-display: optional; }\n",
+		"assets/fonts/noto-400.woff2": "x",
+		"assets/fonts/noto-700.woff2": "x",
+		"assets/fonts/mono.woff2":     "x",
+	})
+	got := rules(report.Findings)
+	want := []string{"css/fonts.css:font-display", "index.html:font-display", "index.html:font-missing"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("字体检查结果不符：want %v got %v\n%v", want, got, report.Findings)
+	}
+	for _, f := range report.Findings {
+		if f.Rule == "font-missing" && (f.Line != 4 || !strings.Contains(f.Message, "assets/fonts/inter.woff2")) {
+			t.Fatalf("缺失字体应点名路径与行号：%+v", f)
+		}
+	}
+}
+
+// TestFontFaceWithoutDisplayPasses：没写 font-display 时 Chrome 按 block 处理，不判。
+func TestFontFaceWithoutDisplayPasses(t *testing.T) {
+	report := scan(t, map[string]string{
+		"index.html": `<style>@font-face { font-family: A; src: url(a.woff2); }</style>`,
+		"a.woff2":    "x",
+	})
+	if !report.OK {
+		t.Fatalf("不应判失败：%v", report.Findings)
 	}
 }

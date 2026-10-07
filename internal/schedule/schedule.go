@@ -218,25 +218,12 @@ func waitBeforeRetry(ctx context.Context, attempt int) {
 	waitFunc(ctx, retryBackoff[index])
 }
 
-// archiveAttempt 把本次尝试的产物与日志移进 attempts/attempt-NN，返回该目录。
-func archiveAttempt(s scene.Scene) string {
-	attemptsRoot := filepath.Join(s.Directory, "attempts")
-	_ = os.MkdirAll(attemptsRoot, 0o755)
-	entries, _ := os.ReadDir(attemptsRoot)
-	number := len(entries) + 1
-	destination := filepath.Join(attemptsRoot, fmt.Sprintf("attempt-%02d", number))
-	_ = os.MkdirAll(destination, 0o755)
-	for _, path := range []string{s.OutputPath(), s.StreamLog(), s.StderrLog(), s.UserLog()} {
-		if _, err := os.Lstat(path); err == nil {
-			_ = os.Rename(path, filepath.Join(destination, filepath.Base(path)))
-		}
-	}
-	return destination
-}
-
 // retryNote 描述上一次失败，供下一次渲染的提示词引用。
 // 日志位置写成相对镜头目录的路径：渲染器被锁在镜头目录内工作。
 func retryNote(s scene.Scene, reason, archived string) string {
+	if archived == "" {
+		return fmt.Sprintf("- 失败原因：%s", reason)
+	}
 	relative, err := filepath.Rel(s.Directory, archived)
 	if err != nil {
 		relative = archived
@@ -262,13 +249,22 @@ func DispatchOrder(scenes []scene.Scene) []scene.Scene {
 // 数取「核数 - 2」「一半系统内存 / 1.5GB」「帧数 / 30」与上限
 // max(6, min(16, 核数/8)) 中的最小值。jobs 个镜头同时渲染时这些估算互不知情，
 // 每个都按独占 CPU 和一半内存算，合起来会超订。按 (核数 - 2) / jobs 均分，留两个核
-// 给编码与系统；jobs 为 1 时返回 0，表示沿用上游的 auto。
-func RenderWorkers(cpus, jobs int) int {
+// 给编码与系统；内存同样按上游的口径（一半内存、每个 Chrome 1.5GB）均分——只分 CPU
+// 的话，16GB 的机器上三个镜头各开 4 个 Chrome 就开始换页，整批一起变慢。
+// memoryBytes 为 0 表示读不到内存大小，只按 CPU 分。jobs 为 1 时返回 0，表示沿用上游的 auto。
+func RenderWorkers(cpus int, memoryBytes uint64, jobs int) int {
 	if jobs <= 1 {
 		return 0
 	}
-	return max(1, (cpus-2)/jobs)
+	workers := (cpus - 2) / jobs
+	if memoryBytes > 0 {
+		workers = min(workers, int(memoryBytes/2/chromeMemoryBytes)/jobs)
+	}
+	return max(1, workers)
 }
+
+// chromeMemoryBytes 是单个帧捕获 Chrome 的内存估算，取 HyperFrames auto 的同一口径。
+const chromeMemoryBytes = 1536 << 20
 
 func RunAll(ctx context.Context, scenes []scene.Scene, jobs, retries int, runner Runner) Report {
 	started := time.Now()
@@ -314,7 +310,7 @@ func RunAll(ctx context.Context, scenes []scene.Scene, jobs, retries int, runner
 						break
 					}
 					if attempt <= retries {
-						archived := archiveAttempt(s)
+						archived := scene.ArchiveAttempt(s)
 						current = s.WithRetryNote(retryNote(s, result.Reason, archived))
 						waitBeforeRetry(ctx, attempt)
 					}

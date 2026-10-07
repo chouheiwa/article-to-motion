@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -368,6 +369,8 @@ func TestRetryCarriesPreviousFailure(t *testing.T) {
 	var notes []string
 	RunAll(context.Background(), scenes, 1, 2, func(_ context.Context, s scene.Scene) error {
 		notes = append(notes, s.RetryNote)
+		// 真实渲染总会留下日志；归档只搬实际存在的文件。
+		os.WriteFile(s.StreamLog(), []byte("{}\n"), 0o644)
 		return fmt.Errorf("渲染器退出码 %d", len(notes))
 	})
 	if len(notes) != 3 {
@@ -387,6 +390,25 @@ func TestRetryCarriesPreviousFailure(t *testing.T) {
 		if strings.Contains(note, root) {
 			t.Errorf("归档路径应相对镜头目录，实际：%q", note)
 		}
+	}
+}
+
+// TestRetryNoteWithoutArtifactsOmitsArchive：渲染器连日志都没留下时不建空的
+// 归档目录，重试说明也不指向一个空目录。
+func TestRetryNoteWithoutArtifactsOmitsArchive(t *testing.T) {
+	recordSleeps(t)
+	root := t.TempDir()
+	scenes := []scene.Scene{testScene(t, root, "scene-001")}
+	var notes []string
+	RunAll(context.Background(), scenes, 1, 1, func(_ context.Context, s scene.Scene) error {
+		notes = append(notes, s.RetryNote)
+		return fmt.Errorf("启动渲染器失败")
+	})
+	if len(notes) != 2 || !strings.Contains(notes[1], "启动渲染器失败") || strings.Contains(notes[1], "attempts/") {
+		t.Fatalf("重试说明不对：%q", notes)
+	}
+	if _, err := os.Stat(filepath.Join(scenes[0].Directory, "attempts")); !os.IsNotExist(err) {
+		t.Fatalf("没有可归档的文件时不应建 attempts 目录：%v", err)
 	}
 }
 
@@ -429,16 +451,35 @@ func TestRunAllDispatchesLongestFirstButReportsInTimelineOrder(t *testing.T) {
 }
 
 func TestRenderWorkers(t *testing.T) {
-	cases := []struct{ cpus, jobs, want int }{
-		{10, 1, 0}, // 单镜头：沿用上游 auto
-		{10, 3, 2}, // (10-2)/3
-		{16, 3, 4}, // (16-2)/3
-		{4, 3, 1},  // 核不够分时至少 1
-		{2, 16, 1},
+	const gib = uint64(1) << 30
+	cases := []struct {
+		cpus   int
+		memory uint64
+		jobs   int
+		want   int
+	}{
+		{10, 0, 1, 0}, // 单镜头：沿用上游 auto
+		{10, 0, 3, 2}, // (10-2)/3
+		{16, 0, 3, 4}, // (16-2)/3
+		{4, 0, 3, 1},  // 核不够分时至少 1
+		{2, 0, 16, 1},
+		{16, 16 * gib, 3, 1}, // 一半内存 8GB 只够 5 个 Chrome，三镜头各 1 个
+		{16, 64 * gib, 3, 4}, // 内存充足时仍按 CPU 分
+		{12, 32 * gib, 2, 5}, // 内存 10 个 Chrome / 2 = 5，CPU (12-2)/2 = 5
+		{32, 32 * gib, 2, 5}, // 内存成为瓶颈
 	}
 	for _, tc := range cases {
-		if got := RenderWorkers(tc.cpus, tc.jobs); got != tc.want {
-			t.Errorf("RenderWorkers(%d, %d) = %d，期望 %d", tc.cpus, tc.jobs, got, tc.want)
+		if got := RenderWorkers(tc.cpus, tc.memory, tc.jobs); got != tc.want {
+			t.Errorf("RenderWorkers(%d, %d, %d) = %d，期望 %d", tc.cpus, tc.memory, tc.jobs, got, tc.want)
 		}
+	}
+}
+
+func TestSystemMemoryReadsPhysicalMemory(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("只在 darwin 与 linux 上实现")
+	}
+	if SystemMemory() < 1<<30 {
+		t.Fatalf("应读到至少 1GB 物理内存，实际 %d", SystemMemory())
 	}
 }

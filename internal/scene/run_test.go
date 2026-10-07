@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +36,8 @@ type probeReply struct {
 	fpsNum   int
 	duration string
 	audio    bool
+	// frames 是逐帧解码统计（-count_frames）汇报的帧数；0 表示按时长 × 帧率推出。
+	frames int
 }
 
 // fakeFfprobe 装一个按 mediaprobe 的调用方式输出 JSON 的假 ffprobe。
@@ -54,6 +58,10 @@ func fakeFfprobe(t *testing.T, dir string, reply probeReply) {
 	if reply.duration == "" {
 		reply.duration = "1.000"
 	}
+	if reply.frames == 0 {
+		seconds, _ := strconv.ParseFloat(reply.duration, 64)
+		reply.frames = int(math.Round(seconds * float64(reply.fpsNum)))
+	}
 	audio := ""
 	if reply.audio {
 		audio = `,{"codec_type":"audio","codec_name":"aac","sample_rate":"48000","channels":2}`
@@ -62,8 +70,8 @@ func fakeFfprobe(t *testing.T, dir string, reply probeReply) {
 	// cat / echo 之类的外部命令都不在里面。
 	json := fmt.Sprintf(`{"streams":[{"codec_type":"video","codec_name":"h264",`+
 		`"width":%d,"height":%d,"pix_fmt":"yuv420p","r_frame_rate":"%d/1",`+
-		`"nb_frames":"30","duration":"%s"}%s],"format":{"duration":"%s"}}`,
-		reply.widthPx, reply.heightPx, reply.fpsNum, reply.duration, audio, reply.duration)
+		`"nb_frames":"30","nb_read_frames":"%d","duration":"%s"}%s],"format":{"duration":"%s"}}`,
+		reply.widthPx, reply.heightPx, reply.fpsNum, reply.frames, reply.duration, audio, reply.duration)
 	executable(t, dir, "ffprobe", "printf '%s\\n' '"+json+"'\n")
 }
 
@@ -132,6 +140,23 @@ func TestVerifyOutputRejectsInvalidArtifacts(t *testing.T) {
 	}
 }
 
+// TestVerifyOutputRejectsFrameCountWithinDurationTolerance 钉住逐帧计数：
+// 差 3 帧（0.1 秒）落在默认 0.15 秒的时长容差内，只看时长会放行，
+// 要等拼接后整片复查才发现。
+func TestVerifyOutputRejectsFrameCountWithinDurationTolerance(t *testing.T) {
+	dir := writeScene(t, `{"id":"scene-001","duration_seconds":1,"output":"out.mp4","transcript":"transcript.srt","text":"hello"}`)
+	s, _ := Load(dir)
+	os.WriteFile(s.OutputPath(), []byte("video"), 0o644)
+	bin := t.TempDir()
+	fakeFfprobe(t, bin, probeReply{duration: "1.000", frames: 33})
+	env := map[string]string{"PATH": bin, "HOME": t.TempDir()}
+	err := VerifyOutput(s, env, 0.15)
+	var verification *VerificationError
+	if !errors.As(err, &verification) || !strings.Contains(err.Error(), "期望 30 帧") || !strings.Contains(err.Error(), "实测 33 帧") {
+		t.Fatalf("expected frame count VerificationError, got %v", err)
+	}
+}
+
 // TestVerifyOutputChecksCanvasFrameRateAndSilence 守住这次补上的三项检查。
 //
 // 过去 VerifyOutput 只看时长：渲染成 720x1280、25fps 或带一条音轨的产物
@@ -178,9 +203,9 @@ func TestVerifyOutputFailuresAreVerificationErrors(t *testing.T) {
 	if !errors.As(err, &verification) {
 		t.Fatalf("应当是 *VerificationError，实际 %T：%v", err, err)
 	}
-	// 三项同时不符时要一次全报出来，否则调用方得修一条重跑一次。
-	if len(verification.Problems) != 3 {
-		t.Errorf("应当报出全部 3 条不符，实际 %d 条：%v", len(verification.Problems), verification.Problems)
+	// 分辨率、帧率、时长、逐帧计数同时不符时要一次全报出来，否则调用方得修一条重跑一次。
+	if len(verification.Problems) != 4 {
+		t.Errorf("应当报出全部 4 条不符，实际 %d 条：%v", len(verification.Problems), verification.Problems)
 	}
 	if !strings.Contains(err.Error(), "out.mp4") {
 		t.Errorf("错误信息没有点名产物：%v", err)
