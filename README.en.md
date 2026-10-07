@@ -123,7 +123,17 @@ am scene run scenes/scene-001
 am scene run-all scenes/ --jobs 3 --retries 2 --report-json production/run-report.json
 ```
 
-Existing outputs are skipped; inputs newer than the output mark it as stale — use `--force` to re-render. Interruptions stop new tasks, terminate in-flight process groups, and write a partial report.
+Scene durations are not computed by hand. The scene plan `production/scene-plan.json` only says which subtitle or phrase each scene starts on and which side of a pause the cut falls on; `am scene cues` derives whole-frame ranges and writes each scene's `duration_seconds` and `timing` block:
+
+```bash
+am scene cues --plan production/scene-plan.json --srt transcription-production.srt \
+  --phrases production/phrase-timeline.json --total-frames 5400 scenes/
+am scene cues --check ...   # same arguments; verifies without writing and reports hand-edited durations
+```
+
+Before rendering, `am` writes scene-local data to `am-scene.js` in the scene directory (`window.AM_SCENE`: canvas, safe areas, subtitle tokens, and subtitles and phrases converted to scene-local frames) and adds the same local timing table to the render prompt, so the renderer no longer subtracts offsets from the full-film SRT. The `scene-kit` skill installed by `am init` reads this data and provides a frame-driven caption component (`SceneKit.captions`), `SceneKit.safeRect`, and easing, fades and a seeded PRNG, so scenes stop re-inventing caption code.
+
+Scenes with an accepted output and unchanged inputs are skipped. When an output passes verification, `am` records an input fingerprint in `.am-render.json` inside the scene directory, with a digest per item: the assembled render prompt, `scene.json`, `prompt.md`, the transcript, the style guide, cast packs, the renderer, skill contents, and the `am` version. Scenes whose inputs changed are marked stale, the report names the items that changed, and `--force` re-renders them; older outputs without a record still fall back to modification times. Every render attempt writes `render-<scene id>.attempt.json` (duration, outcome, exit code, and token usage when the stream reports it), and the previous output and logs are archived into `attempts/` before a re-render. Interruptions stop new tasks, terminate in-flight process groups, and write a partial report.
 
 AI CLIs run in project-scoped safe mode by default. `am --unsafe run` explicitly restores bypass/auto-approval behavior and should only be used for trusted projects. Extra environment variables in safe mode must be named in `AM_PASSTHROUGH_ENV`.
 
@@ -172,9 +182,9 @@ am concat scenes/ --out production/silent-master.mp4
 
 `am concat` deliberately offers no retiming. A resolution or frame-rate mismatch fails and asks you to re-render the scene rather than scaling or resampling — the former loses quality, the latter moves the timeline.
 
-Besides canvas, frame rate, duration, and silence, the scene output check scans the HTML/JS/CSS the render actually loads: reading the clock, `Math.random()`, `requestAnimationFrame`, `setInterval`, infinite `repeat`, render-time network access, web fonts, and CDN libraries without a full version pin all make the same frame differ between renders. Any hit fails the scene without a retry. Interactive code that the render path never reaches can be exempted with an `am-allow-nondeterministic: reason` comment on the same line; exemptions still appear in the report.
+Besides canvas, frame rate, duration, and silence, the scene output check decodes every frame to verify the exact frame count (the duration tolerance alone lets a scene that is a few frames off through), and scans the HTML/JS/CSS the render actually loads: reading the clock, `Math.random()`, `requestAnimationFrame`, `setInterval`, infinite `repeat`, render-time network access, web fonts, and CDN libraries without a full version pin all make the same frame differ between renders; an `@font-face` pointing at a file missing from the scene directory, or `font-display` set to `swap` / `fallback` / `optional`, silently falls back to another font. Any hit fails the scene without a retry. Interactive code that the render path never reaches can be exempted with an `am-allow-nondeterministic: reason` comment on the same line; exemptions still appear in the report.
 
-`am scene run-all` dispatches the longest scenes first so a long scene at the end of the timeline does not stretch the whole batch on its own. When rendering in parallel it gives each scene `(CPU cores - 2) / jobs` HyperFrames `--workers`, so concurrent renders do not each size themselves for the whole machine and oversubscribe CPU and memory.
+`am scene run-all` dispatches the longest scenes first so a long scene at the end of the timeline does not stretch the whole batch on its own. When rendering in parallel it gives each scene `(CPU cores - 2) / jobs` HyperFrames `--workers`, capped at half the physical memory ÷ 1.5 GB per Chrome ÷ jobs, so concurrent renders do not each size themselves for the whole machine and oversubscribe CPU and memory.
 
 ## Platform covers
 
@@ -217,7 +227,8 @@ am audio check --audio production/audio/voice.wav --srt production/audio/voice.s
 
 # Whole-film review: audio/video stream lengths, total frames vs. the scene sum, frames at
 # every cut, per-scene contact sheets, and a frame-by-frame strip at every cut; with an audio
-# track it also measures integrated loudness and true peak, hinting when they miss frame.md
+# track it also measures integrated loudness and true peak, hinting when they miss frame.md,
+# and hints when audio and video lengths differ by more than one AAC frame (1024 samples)
 am review final.mp4 --scenes scenes/ --out production/review
 
 am archive --dry-run
