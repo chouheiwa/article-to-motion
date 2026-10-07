@@ -675,6 +675,7 @@ func BuildPrompt(s Scene, resolvedSkills map[string]string) (string, error) {
 const determinismSection = `
 确定性（强制，渲染后由源码扫描检查，命中即判本镜头失败且不重试）：
 - 渲染实际加载的 HTML、JS、CSS 里不得出现：Date.now()、performance.now()、无参 new Date()、Math.random()、requestAnimationFrame、setInterval、repeat: -1，以及渲染时的网络请求（远程 fetch、XMLHttpRequest、WebSocket）。随机效果用固定种子的 PRNG。随镜头拷贝的第三方库放进 vendor/ 目录或保留 .min.js 文件名，它们按库跳过、不做判定。
+- @font-face 的 src 必须指向本镜头目录里实际存在的字体文件，font-display 只能是 block（或不写）；指向不存在的文件会静默 404、字体回退，swap / fallback / optional 会让并行抽帧的部分帧抓到回退字体。
 - 远程资源只允许 cdn.jsdelivr.net、unpkg.com、esm.sh、cdnjs.cloudflare.com 上带完整版本号（x.y.z）的库；在线字体、远程图片与未固定版本的库都不允许，所需文件放进镜头目录。
 - 仅在渲染路径确实不经过的交互代码（如 viewer 预览播放）上，可在同一行注释写 ` + "`" + `am-allow-nondeterministic: 理由` + "`" + ` 豁免，豁免会写进报告。
 `

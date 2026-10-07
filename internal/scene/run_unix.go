@@ -70,6 +70,11 @@ func Run(ctx context.Context, s Scene, cfg config.Config, unsafe bool, baseEnv m
 	if err := RemoveRecord(s); err != nil {
 		return err
 	}
+	// 局部时间数据在渲染器启动前写好：提示词让渲染器直接加载它，
+	// 不再自己从全片字幕里做减法。
+	if err := WriteSceneData(s); err != nil {
+		return err
+	}
 	started := time.Now()
 	attempt := Attempt{SceneID: s.ID, Renderer: renderer, Fingerprint: inputs.Fingerprint, StartedAt: timestamp(started), Retry: s.RetryNote != ""}
 	var usage tools.Usage

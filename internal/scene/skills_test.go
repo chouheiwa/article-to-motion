@@ -482,7 +482,7 @@ func TestSceneKitPromptMakesCaptionsAndLayoutMandatory(t *testing.T) {
 		section := sceneKitPrompt(dir)
 		for _, want := range []string{
 			"强制", "SceneKit.captions", "SceneKit.safeRect", sceneKitLibraryFile,
-			"复制进本镜头目录", "不得手写字幕代码", "先加载镜头目录里的 " + sceneDataFile,
+			"复制进本镜头目录", "不得手写字幕代码", "先加载镜头目录里的 " + SceneDataFile,
 		} {
 			if !strings.Contains(section, want) {
 				t.Errorf("skillsDir=%q 时，scene-kit 片段缺少 %q：\n%s", dir, want, section)

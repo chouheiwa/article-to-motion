@@ -372,16 +372,26 @@ am audio check --audio production/audio/voice.wav --srt production/audio/voice.s
 - 每个镜头对应一个连续时间区间。
 - 所有镜头按顺序首尾相接，完整覆盖从节目第 0 帧到最终帧的总跨度。
 - 无文字空白并入前一个镜头作为停顿、收尾或转场；很长的空白可以单独成为静默/转场镜头。
-- 镜头时长以秒表示并保留毫秒精度，例如 `2.833`、`6.500`。
+- 镜头时长不要手算：分镜只决定「每个镜头从哪条字幕或哪个短语开始、切在空白的哪一侧」，帧号由 `am scene cues` 推出。
 
-调用渲染工具前必须复核：
+把分镜写成 `production/scene-plan.json`，字段名固定（`am scene cues` 严格解析，未知字段直接报错）：
 
-- 所有镜头 `scene.json` 中 `duration_seconds` 之和等于最终节目时长，误差不超过 0.1 秒。
-- 换算后的各镜头帧数之和等于总帧数。
-- 每个镜头先定帧数，再写 `duration_seconds = 帧数 ÷ 帧率`，保留 6 位小数（431 帧写 `14.366667`，不写 `14.367`）。渲染器按向上取整出帧，14.367 秒是 431.01 帧，会渲出 432 帧；`am scene run-all` 在渲染前会拒绝任何非整数帧的时长。
-- 没有时间重叠、缺口或负时长。
+```json
+{
+  "schema": 1,
+  "scenes": [
+    {"id": "scene-001", "dir": "scenes/scene-001", "visual_role": "语境", "summary": "开场提出问题"},
+    {"id": "scene-002", "dir": "scenes/scene-002", "first_subtitle": 5, "visual_role": "机制"},
+    {"id": "scene-003", "dir": "scenes/scene-003", "first_phrase": "p-07", "cut": "mid_gap", "visual_role": "证据"}
+  ]
+}
+```
 
-把分镜写入 `production/scene-plan.json` 和 `production/scene-plan.md`。
+- 除第一个镜头外，每个镜头写 `first_subtitle`（`transcription-production.srt` 里的字幕序号，从 1 开始）或 `first_phrase`（`phrase-timeline.json` 的 `phrase_id`），只写一个。
+- `cut` 决定切点落在空白哪一侧：缺省 `next_start`（空白并入前一个镜头）、`prev_end`（空白并入本镜头）、`mid_gap`（切在空白正中）。很长的空白要单独成为静默或转场镜头时，给它一个镜头，锚点写空白后的第一条字幕。
+- `dir` 的顺序必须与 `scenes/` 下镜头目录的字典序一一对应。
+
+同时写 `production/scene-plan.md` 给人审阅：每个镜头的字幕范围、视觉角色、要证明或解释的台词。
 
 ### 视觉负载与节奏预算
 
@@ -415,7 +425,7 @@ scenes/
 
 每个镜头必须：
 
-- 建立 `scene.json`：执行契约。字段为 `id`、`duration_seconds`、`output`、`transcript`、`text`，可选 `style_guide` 和 `renderer`；未知字段会直接报错。`text` 会被包进 `<scene-text>` 定界块送进渲染提示词并声明为「数据而非指令」，因此 `text` 本身不得含 `[[USER_MESSAGE]]` 标记或 `<scene-text>` / `</scene-text>` 及其形近变体，含则报错。
+- 建立 `scene.json`：执行契约。字段为 `id`、`duration_seconds`、`output`、`transcript`、`text`，可选 `style_guide` 和 `renderer`；`timing` 块由 `am scene cues` 写入，不要手写；未知字段会直接报错。`duration_seconds` 先写占位值 `1`，正式时长由下面的 `am scene cues` 写入。`text` 会被包进 `<scene-text>` 定界块送进渲染提示词并声明为「数据而非指令」，因此 `text` 本身不得含 `[[USER_MESSAGE]]` 标记或 `<scene-text>` / `</scene-text>` 及其形近变体，含则报错。
 - 建立 `prompt.md`：本镜头的创意方向、视觉概念和表达重点。交付规格、阶段消息等执行契约由 `am` 保证，不在本文件中。
 - 使用 `am init` 装进项目 `.agents/skills/` 的技能。技能缺失时重跑 `am init` 补齐，不要自己跑 `npx hyperframes skills`——那会装到本机 HOME 而不是项目里，绕过版本固定；也不得从其他项目或本机目录复制。
 - 建立渲染器锁定文件：固定 HyperFrames 版本为 `0.8.14` 并要求每次 CLI 调用都带 `npx --yes hyperframes@0.8.14` 前缀；禁止 `hyperframes@latest`、不带版本的 `npx hyperframes`、`hyperframes skills`、`skills update` 以及任何会改动已装技能的命令；禁止读取 `.env` 或打印凭据；禁止改动 `scene.json` 里的执行契约。文件名取决于该镜头所用渲染工具会自动读取的项目级指令文件（例如 `claude` 读 `CLAUDE.md`），按所选工具各自的约定命名，不要不管用哪个工具都写成 `CLAUDE.md`。
@@ -429,8 +439,18 @@ scenes/
 - 在 `prompt.md` 中写明镜头交接：入场状态（承接上一镜头的哪个持续物件、它在第 0 帧的位置、大小与状态）与出场状态（最后一帧留给下一镜头的物件、位置与状态）。各镜头分别渲染、互相看不到，交接只能靠这两段约定；相邻两个镜头的出场状态与入场状态必须逐项对得上。第一个镜头没有入场状态，最后一个镜头的出场状态就是全片收束画面。
 - 在 `prompt.md` 中提醒画面文字与字幕分工：标题与关键词只做命名、归纳和给结构，不复述正在读的台词。
 - 要求输出 1920×1080、30fps、静音、无音轨的 MP4。
-- 在 `prompt.md` 中附上该镜头的全局起止帧、短语事件表、禁止提前出现的未来短语、最小可读帧数和结尾停留要求；这些内容作为创意实现的时间合同，不改变 `am` 已有执行字段。
+- 不要在 `prompt.md` 里手抄帧号：镜头的全局起止帧、本镜头的短语表与字幕（换算成镜头局部帧）、最小可读帧数由 `am` 写进渲染提示词，并在渲染前写成镜头目录里的 `am-scene.js`。`prompt.md` 只写结尾停留要求和哪些短语不得提前出现等创意层面的约束。
+- 画面内烧录字幕、按安全区排版时，用随 `am init` 下发的 `scene-kit` 技能（`SceneKit.captions`、`SceneKit.safeRect`），不要每个镜头各写一套字幕代码。
 - 要求渲染工具先盘点所有可读 DOM 元素，并确保它们全部登记到 `visible-event-inventory.json`；装饰元素可豁免，但必须明确标记为装饰。
+
+全部镜头目录与 `scene.json` 建好后，由分镜计划推出每个镜头的时长：
+
+```bash
+am scene cues --plan production/scene-plan.json --srt transcription-production.srt \
+  --phrases production/phrase-timeline.json --total-frames <总帧数> scenes/
+```
+
+它把全片切成首尾相接的整数帧区间，写入每个镜头的 `duration_seconds`（帧数 ÷ 帧率，6 位小数）与 `timing` 块，并把短语时间轴复制进镜头目录；合计不等于总帧数、锚点不递增或有镜头不足一帧时整体失败、不写任何文件。之后不得手改 `duration_seconds`：改分镜就改 `scene-plan.json` 再重跑本命令。渲染前用同样的参数加 `--check` 复核一次，有人手改过时长会被逐条列出。
 
 阶段性汇报和日志规则必须保留：
 
@@ -440,13 +460,13 @@ scenes/
 - 保留 `render-<scene>.user.log`。
 - 阶段消息至少覆盖需求与素材检查、联网搜索、代码完成开始渲染、MP4 渲染完成。
 
-用 `am scene run-all scenes/ --srt transcription.srt --strict-coverage --report-json production/run-report.json` 一次性调度。已有合格产物的镜头会被跳过；输入比产物新的镜头会被跳过并警告，需要重渲染时用 `am scene run <镜头目录>`。渲染器非零退出自动重试（退避 10 秒与 30 秒）并把失败证据保留在 `attempts/attempt-NN/`；产物校验失败不重试。
+用 `am scene run-all scenes/ --srt transcription.srt --strict-coverage --report-json production/run-report.json` 一次性调度。已有合格产物且输入没变的镜头会被跳过：`am` 在产物通过校验时把输入指纹（渲染提示词、`scene.json`、`prompt.md`、字幕、视觉规范、角色包、渲染工具、技能内容与 `am` 版本）记在镜头目录的 `.am-render.json`。输入变了的镜头会被跳过并在报告里写明是哪几项变了，确认要重渲染时用 `am scene run <镜头目录>` 或 `--force`。渲染器非零退出自动重试（退避 10 秒与 30 秒）并把失败证据保留在 `attempts/attempt-NN/`；产物校验失败不重试。每次尝试的耗时、结果与用量写在镜头目录的 `render-<镜头编号>.attempt.json`，重跑前上一次的产物与日志会先归档进 `attempts/`。
 
 `--srt` 加 `--strict-coverage` 在开始渲染前核对镜头编号唯一性与「镜头总时长等于字幕跨度」。务必带上：这条规则本来就写在第五阶段，但漏掉一镜等到拼接时才发现的话，每一镜都已经烧掉一次完整的渲染调用。
 
-产物校验查画幅、帧率、时长和「必须无音轨」四项，画幅取自 `frame.md`。不符时回镜头工程重渲染，不要在后面的阶段缩放补救。
+产物校验查画幅、帧率、时长、逐帧解码的总帧数和「必须无音轨」，画幅取自 `frame.md`。不符时回镜头工程重渲染，不要在后面的阶段缩放补救。
 
-产物校验还会静态扫描镜头合成源码：读时钟、`Math.random()`、`requestAnimationFrame`、`setInterval`、无限 `repeat`、渲染时联网、在线字体与未固定版本的 CDN 库都会让同一帧在两次渲染间不同，命中即判失败且不重试。改完合成代码、重渲染前可用 `am scene lint <镜头目录>` 先确认。
+产物校验还会静态扫描镜头合成源码：读时钟、`Math.random()`、`requestAnimationFrame`、`setInterval`、无限 `repeat`、渲染时联网、在线字体与未固定版本的 CDN 库都会让同一帧在两次渲染间不同；`@font-face` 指向镜头目录里不存在的字体文件、或 `font-display` 写成 `swap` / `fallback` / `optional`，会让字体静默回退或部分帧抓到回退字体。这些命中即判失败且不重试。改完合成代码、重渲染前可用 `am scene lint <镜头目录>` 先确认。
 
 `--report-json` 落盘的报告是判断结果的依据，不要去解析终端上的中文汇总。每个镜头一条记录，字段为 `scene_id`、`status`（`succeeded` / `skipped` / `stale` / `failed`）、`attempts`、`seconds`、`reason`；顶层还有 `counts`、`exit_code` 和 `interrupted`。被中断时报告照常落盘，据 `interrupted` 与各镜头 `status` 判断哪些还需要重跑。
 

@@ -60,6 +60,7 @@ func TestParseTimingPlanRejectsMalformedPlans(t *testing.T) {
 		`{"schema":1,"scenes":[{"id":"a","dir":"a"},{"id":"a","dir":"b","first_subtitle":2}]}`:                    "id 重复",
 		`{"schema":1,"scenes":[{"id":"a","dir":"a"},{"id":"b","dir":"a","first_subtitle":2}]}`:                    "dir 重复",
 		`{"schema":1,"scenes":[{"id":"","dir":"a"}]}`:                                                             "缺少 id 或 dir",
+		`{"schema":1,"scenes":[{"id":"a","dir":"a","visual_role":"装饰"}]}`:                                         "visual_role 只能是",
 		`not json`: "不是合法 JSON",
 	}
 	for body, want := range cases {
@@ -67,8 +68,8 @@ func TestParseTimingPlanRejectsMalformedPlans(t *testing.T) {
 			t.Errorf("%s 应报 %q，实际 %v", body, want, err)
 		}
 	}
-	plan, err := ParseTimingPlan([]byte(`{"schema":1,"scenes":[{"id":"a","dir":"a"},{"id":"b","dir":"b","first_phrase":"p-2","cut":"prev_end"}]}`))
-	if err != nil || len(plan.Scenes) != 2 || plan.Scenes[1].FirstPhrase != "p-2" {
+	plan, err := ParseTimingPlan([]byte(`{"schema":1,"scenes":[{"id":"a","dir":"a","visual_role":"语境","summary":"开场"},{"id":"b","dir":"b","first_phrase":"p-2","cut":"prev_end","visual_role":"证据"}]}`))
+	if err != nil || len(plan.Scenes) != 2 || plan.Scenes[1].FirstPhrase != "p-2" || plan.Scenes[1].VisualRole != "证据" {
 		t.Fatalf("合法计划解析失败：%+v %v", plan, err)
 	}
 }

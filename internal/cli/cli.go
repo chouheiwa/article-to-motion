@@ -617,6 +617,9 @@ AI CLI 调用。这类失败要先改提示词或时长声明再重跑。
 				if err := scene.VerifyBeatInputs(s); err != nil {
 					return err
 				}
+				if err := scene.VerifyTimingInputs(s); err != nil {
+					return err
+				}
 			}
 			if beat.Enabled(".") {
 				if err := beatCoverage(".", scenes); err != nil {
@@ -680,6 +683,7 @@ AI CLI 调用。这类失败要先改提示词或时长声明再重跑。
 	runAll.Flags().BoolVar(&strictCoverage, "strict-coverage", false, "覆盖校验不通过时直接失败，而不是只打印警告")
 	sceneCmd.AddCommand(runAll)
 	sceneCmd.AddCommand(newSceneFramesCommand(stdout))
+	sceneCmd.AddCommand(newSceneCuesCommand(stdout))
 	sceneCmd.AddCommand(newSceneLintCommand(stdout))
 	root.AddCommand(sceneCmd)
 

@@ -14,6 +14,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -182,7 +183,15 @@ type PlanEntry struct {
 	FirstSubtitle *int   `json:"first_subtitle,omitempty"`
 	FirstPhrase   string `json:"first_phrase,omitempty"`
 	Cut           string `json:"cut,omitempty"`
+	// VisualRole 是制作提示词第五阶段要求的主要视觉角色，不参与计时，
+	// 但写错了就该在这里报：计划是严格解析的，拼错的键不会被静默丢掉。
+	VisualRole string `json:"visual_role,omitempty"`
+	// Summary 是给人看的一句话镜头说明，不参与计时。
+	Summary string `json:"summary,omitempty"`
 }
+
+// VisualRoles 是 visual_role 的合法取值，与制作提示词第五阶段的四种视觉角色一致。
+var VisualRoles = []string{"语境", "证据", "机制", "节奏"}
 
 // ParseTimingPlan 严格解析分镜计划：未知字段、缺字段、锚点写法不合法都直接报错。
 func ParseTimingPlan(body []byte) (TimingPlan, error) {
@@ -227,6 +236,9 @@ func ParseTimingPlan(body []byte) (TimingPlan, error) {
 		case "", CutNextStart, CutPrevEnd, CutMidGap:
 		default:
 			return TimingPlan{}, fmt.Errorf("%s（%s）的 cut 只能是 %s、%s 或 %s，收到 %q", where, entry.ID, CutNextStart, CutPrevEnd, CutMidGap, entry.Cut)
+		}
+		if entry.VisualRole != "" && !slices.Contains(VisualRoles, entry.VisualRole) {
+			return TimingPlan{}, fmt.Errorf("%s（%s）的 visual_role 只能是 %s，收到 %q", where, entry.ID, strings.Join(VisualRoles, "、"), entry.VisualRole)
 		}
 		if i == 0 && entry.Cut != "" {
 			return TimingPlan{}, fmt.Errorf("%s（%s）固定从第 0 帧开始，不能写 cut", where, entry.ID)

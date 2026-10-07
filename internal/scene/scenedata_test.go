@@ -207,7 +207,9 @@ func TestBuildPromptWithoutTimingIsUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, banned := range []string{"时间合同", SceneDataFile, "AM_SCENE"} {
+	// am-scene.js 本身照常出现：每次渲染前都会写它（安全区与字幕规范不依赖 timing），
+	// scene-kit 技能段也要求先加载它。老镜头只是没有时间合同表。
+	for _, banned := range []string{"时间合同"} {
 		if strings.Contains(prompt, banned) {
 			t.Errorf("老镜头提示词不应出现 %q", banned)
 		}

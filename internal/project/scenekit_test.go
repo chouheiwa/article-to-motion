@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	assets "github.com/chouheiwa/articale-to-motion"
@@ -37,6 +38,16 @@ func TestSceneKitPassesDeterminismScan(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// 示例引用的字体按技能说明随镜头目录提供；缺了它，扫描会如实报字体文件缺失。
+	fonts := filepath.Join(sceneDir, "assets", "fonts")
+	if err := os.MkdirAll(fonts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range exampleFontFiles(t, shared, skill+"example.html") {
+		if err := os.WriteFile(filepath.Join(fonts, name), []byte("woff2"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// am-scene.js 由 am 在渲染前生成，这里只放一个占位，让引用能解析到本地文件。
 	if err := os.WriteFile(filepath.Join(sceneDir, "am-scene.js"), []byte("window.AM_SCENE = {schema: 1};\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -61,4 +72,18 @@ func TestSceneKitPassesDeterminismScan(t *testing.T) {
 	if len(report.Allowed) != 0 {
 		t.Errorf("scene-kit 不应依赖逐行豁免：%v", report.Allowed)
 	}
+}
+
+// exampleFontFiles 读出示例 @font-face 引用的 assets/fonts/ 下的文件名。
+func exampleFontFiles(t *testing.T, shared fs.FS, path string) []string {
+	t.Helper()
+	body, err := fs.ReadFile(shared, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, m := range regexp.MustCompile(`assets/fonts/([\w.-]+\.woff2)`).FindAllStringSubmatch(string(body), -1) {
+		names = append(names, m[1])
+	}
+	return names
 }

@@ -55,10 +55,6 @@ const SceneKitSkillName = "scene-kit"
 // RequiredFiles 与提示词的复制契约里，所以取一个常量。
 const sceneKitLibraryFile = "scene-kit.js"
 
-// sceneDataFile 是 am 渲染前写进镜头目录的数据文件，scene-kit.js 从它读
-// window.AM_SCENE。加载顺序必须是它在前。
-const sceneDataFile = "am-scene.js"
-
 // CastRequiredHeading 是 castSection 在"本镜头有角色出场"时输出的段标题
 // （不含前导换行与冒号），三处共同的契约锚点：castSection 产出它、
 // characterRigPrompt 的角色驱动门控靠"下方是否出现这个标题"决定要不要让
@@ -499,7 +495,7 @@ func sceneKitPrompt(skillsDir string) string {
 	}
 	return "镜头工具库（强制）：\n" + reference +
 		"- 用到它时把技能目录里的 " + sceneKitLibraryFile + " 复制进本镜头目录，用相对路径引入；不得引用镜头目录之外的文件。\n" +
-		"- 先加载镜头目录里的 " + sceneDataFile + "（由上层在渲染前写好，不要自己写或改），再加载 " + sceneKitLibraryFile + "。\n" +
+		"- 先加载镜头目录里的 " + SceneDataFile + "（由上层在渲染前写好，不要自己写或改），再加载 " + sceneKitLibraryFile + "。\n" +
 		"- 画面内烧录的字幕一律用 SceneKit.captions，不得手写字幕代码：位置、字号、断行与样式都按视觉规范的字幕规范统一。\n" +
 		"- 版式按安全区取值用 SceneKit.safeRect，不要把安全区像素手抄进合成；短语时间窗用 SceneKit.phrase。\n"
 }
