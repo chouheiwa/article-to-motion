@@ -48,6 +48,17 @@ const TextToLottieSkillName = "text-to-lottie"
 // CharacterRigSkillName 是角色驱动技能目录名。
 const CharacterRigSkillName = "character-rig"
 
+// SceneKitSkillName 是按帧驱动工具库（缓动、安全区、字幕）技能目录名。
+const SceneKitSkillName = "scene-kit"
+
+// sceneKitLibraryFile 是 scene-kit 技能里的库文件名。它同时出现在
+// RequiredFiles 与提示词的复制契约里，所以取一个常量。
+const sceneKitLibraryFile = "scene-kit.js"
+
+// sceneDataFile 是 am 渲染前写进镜头目录的数据文件，scene-kit.js 从它读
+// window.AM_SCENE。加载顺序必须是它在前。
+const sceneDataFile = "am-scene.js"
+
 // CastRequiredHeading 是 castSection 在"本镜头有角色出场"时输出的段标题
 // （不含前导换行与冒号），三处共同的契约锚点：castSection 产出它、
 // characterRigPrompt 的角色驱动门控靠"下方是否出现这个标题"决定要不要让
@@ -137,6 +148,14 @@ var RegisteredSkills = []SkillDescriptor{
 		// 提示词里那条「把驱动库复制进镜头目录」的契约就无从执行。
 		RequiredFiles: []string{skillManifestFile, castDriverFile},
 		PromptSection: characterRigPrompt,
+	},
+	{
+		Name:   SceneKitSkillName,
+		Source: SourceEmbedded,
+		// 库文件本身也是必需文件：只有 SKILL.md 的技能目录，提示词里那条
+		// 「把库复制进镜头目录」的契约就无从执行。
+		RequiredFiles: []string{skillManifestFile, sceneKitLibraryFile},
+		PromptSection: sceneKitPrompt,
 	},
 }
 
@@ -304,6 +323,9 @@ func animationPrompt(skillsDir string) string {
 			AnimationSkillName, skill, rulesIndexFile, AnimationSkillName)
 	}
 	return "动效要求（强制）：\n" + reference +
+		"- 导演的是状态变化，不只是入场：每个动画先想清楚它最终停在什么状态、那个状态是否说明了这句台词的论点；" +
+		"入场再漂亮，也补不了落定状态说不清的问题。\n" +
+		"- 跟随关系要成立：指针落在它要按的控件上，标签跟着它标注的对象走。\n" +
 		"- 按文案选 rule，不设数量下限：每个动效都要说得出它在表达哪句话、哪层关系或哪个转折，" +
 		"说不出理由的不加。宁可少而准，不要为了显得丰富堆叠属性。\n" +
 		"- 镜头包含 3 个及以上阶段时，先读同目录 " + blueprintsIndexFile + " 选一个模板再落地。\n" +
@@ -456,6 +478,30 @@ func characterRigPrompt(skillsDir string) string {
 		"  （本机未能定位该技能目录，请使用你自身的技能加载机制载入。）\n"+
 		"- 没有角色的镜头忽略本段，不要自行引入角色。\n",
 		CastRequiredHeading, CharacterRigSkillName)
+}
+
+// sceneKitPrompt 是按帧驱动工具库的提示词片段，解析到就总是注入。
+//
+// 这个库存在的理由是让各镜头不再各写各的：字幕位置、字号、断行每镜不同，
+// frame.md 的字幕规范没有任何共用代码去执行。所以措辞必须把「烧录字幕一律
+// 用 SceneKit.captions」「版式用 safeRect 而不是手抄像素」写成要求而不是建议，
+// 否则渲染器照旧手写一套，库就白装了。
+//
+// 复制义务与 character-rig 同理：渲染只服务镜头目录内的文件，引用镜头目录外的
+// 路径会静默 404，字幕不出现、渲染照样退出码 0。
+func sceneKitPrompt(skillsDir string) string {
+	reference := fmt.Sprintf("- 加载 %s 技能，用法以其中的 %s 为准。\n"+
+		"  （本机未能定位该技能目录，请使用你自身的技能加载机制载入。）\n",
+		SceneKitSkillName, skillManifestFile)
+	if skillsDir != "" {
+		reference = fmt.Sprintf("- 加载 %s 技能，用法以其中的 %s 为准。本机该技能目录为：\n    %s\n",
+			SceneKitSkillName, skillManifestFile, filepath.Join(skillsDir, SceneKitSkillName))
+	}
+	return "镜头工具库（强制）：\n" + reference +
+		"- 用到它时把技能目录里的 " + sceneKitLibraryFile + " 复制进本镜头目录，用相对路径引入；不得引用镜头目录之外的文件。\n" +
+		"- 先加载镜头目录里的 " + sceneDataFile + "（由上层在渲染前写好，不要自己写或改），再加载 " + sceneKitLibraryFile + "。\n" +
+		"- 画面内烧录的字幕一律用 SceneKit.captions，不得手写字幕代码：位置、字号、断行与样式都按视觉规范的字幕规范统一。\n" +
+		"- 版式按安全区取值用 SceneKit.safeRect，不要把安全区像素手抄进合成；短语时间窗用 SceneKit.phrase。\n"
 }
 
 func songExplainerPrompt(dir string) string {
