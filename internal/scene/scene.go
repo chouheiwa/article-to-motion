@@ -50,7 +50,7 @@ var (
 // 都从这里派生，不再各写一份、彼此漂移。改字段集时只改这两个切片。
 var (
 	requiredSceneFields = []string{"id", "duration_seconds", "output", "transcript", "text"}
-	optionalSceneFields = []string{"style_guide", "renderer", "cast", "song", "beat"}
+	optionalSceneFields = []string{"style_guide", "renderer", "cast", "song", "beat", "timing"}
 )
 
 // RequiredFields 返回 scene.json 的必填字段名（副本，调用方可自由修改）。
@@ -84,6 +84,9 @@ type Scene struct {
 	Song *song.Cue `json:"song,omitempty"`
 	// Beat 是卡点镜头绑定的节拍网格区间，由 am beat cues 写入。
 	Beat *beat.Cue `json:"beat,omitempty"`
+	// Timing 是口播镜头在全片时间轴上的帧区间，由 am scene cues 写入。
+	// 老镜头没有这个字段，Timing 为 nil，提示词与校验都与引入之前一致。
+	Timing *Timing `json:"timing,omitempty"`
 	// RetryNote 是调度器在重试前填入的上一次失败说明，不来自 scene.json。
 	// 同一提示词重跑大概率重蹈覆辙，把失败原因和归档日志位置交给渲染器，
 	// 它才有机会换一种做法。
@@ -391,23 +394,31 @@ type styleTokens struct {
 // 这里刻意不依赖 internal/preset：镜头目录可以脱离项目独立运行
 // （am scene run <目录>），能拿到的只有目录内的文件。
 func readStyleTokens(directory, styleGuide string) (styleTokens, error) {
+	var parsed styleTokens
+	if err := readStyleFrontmatter(directory, styleGuide, &parsed); err != nil {
+		return styleTokens{}, err
+	}
+	return parsed, nil
+}
+
+// readStyleFrontmatter 把视觉规范的 YAML frontmatter 解析进 target。
+func readStyleFrontmatter(directory, styleGuide string, target any) error {
 	path, err := contained(directory, styleGuide, "style_guide")
 	if err != nil {
-		return styleTokens{}, err
+		return err
 	}
 	body, err := os.ReadFile(path)
 	if err != nil {
-		return styleTokens{}, fmt.Errorf("读取视觉规范失败：%w", err)
+		return fmt.Errorf("读取视觉规范失败：%w", err)
 	}
 	parts := strings.SplitN(string(body), "---", 3)
 	if len(parts) != 3 {
-		return styleTokens{}, fmt.Errorf("视觉规范 %s 缺少 YAML frontmatter，无法确定画幅", styleGuide)
+		return fmt.Errorf("视觉规范 %s 缺少 YAML frontmatter，无法确定画幅", styleGuide)
 	}
-	var parsed styleTokens
-	if err := yaml.Unmarshal([]byte(parts[1]), &parsed); err != nil {
-		return styleTokens{}, fmt.Errorf("视觉规范 %s 的 frontmatter 解析失败：%w", styleGuide, err)
+	if err := yaml.Unmarshal([]byte(parts[1]), target); err != nil {
+		return fmt.Errorf("视觉规范 %s 的 frontmatter 解析失败：%w", styleGuide, err)
 	}
-	return parsed, nil
+	return nil
 }
 
 // rejectDraftStyle 拦下尚未定稿的自定义风格。
@@ -581,6 +592,9 @@ func BuildPrompt(s Scene, resolvedSkills map[string]string) (string, error) {
 	if err := VerifyBeatInputs(s); err != nil {
 		return "", err
 	}
+	if err := VerifyTimingInputs(s); err != nil {
+		return "", err
+	}
 	if err := VerifyFrameAlignment(s); err != nil {
 		return "", err
 	}
@@ -622,6 +636,10 @@ func BuildPrompt(s Scene, resolvedSkills map[string]string) (string, error) {
 				"图里的文字与字形不得照搬。\n"
 		}
 	}
+	timing, err := timingSection(s)
+	if err != nil {
+		return "", err
+	}
 	prompt := fmt.Sprintf(`当前只执行一个 MG 动画镜头，不进行交互提问。
 
 任务目标：
@@ -645,7 +663,7 @@ func BuildPrompt(s Scene, resolvedSkills map[string]string) (string, error) {
 [[USER_MESSAGE]]开始联网搜索
 [[USER_MESSAGE]]代码已完成，开始渲染
 [[USER_MESSAGE]]视频已渲染完成：%s
-`, canvas.Label(), s.ID, s.DurationSeconds, frames, canvas.FPS, frames, canvas.FPS, frames, s.Output, s.Transcript, TextOpen, s.Text, TextClose, body, style, castSection(s)+songSection(s, resolvedSkills), skillPromptSections(resolvedSkills), determinismSection+workersSection(s)+selfReviewSection, retrySection(s), s.Output)
+`, canvas.Label(), s.ID, s.DurationSeconds, frames, canvas.FPS, frames, canvas.FPS, frames, s.Output, s.Transcript, TextOpen, s.Text, TextClose, body, style, castSection(s)+songSection(s, resolvedSkills)+timing, skillPromptSections(resolvedSkills), determinismSection+workersSection(s)+selfReviewSection, retrySection(s), s.Output)
 	return prompt, nil
 }
 
@@ -683,7 +701,7 @@ const selfReviewSection = `
   4. 画面是否大面积空白（尤其下半部）或过度拥挤；
   5. 是否有背景、中景、前景的层次，还是只有文字压在纯色底上；
   6. 与版式示例图相比，构图密度与风格是否一致。
-- 静帧看不出动作。每个关键入场、阶段切换和结尾收束，用 snapshot --at 连续截取该段的每一帧（30fps 下间隔 0.0333 秒，取 0.3–0.5 秒），按顺序看：
+- 静帧看不出动作。每个关键入场、阶段切换和结尾收束，用 snapshot --at 连续截取该段的每一帧（第 n 帧的时间写成 n ÷ fps 保留 6 位小数，30fps 下第 15 帧是 0.500000；逐帧取，不要按固定步长累加；取 0.3–0.5 秒），按顺序看：
   7. 有没有一帧蹦出、跳变或闪烁；入场前是否有预备、到位后是否有回落与稳定；
   8. 是否全程同一速度、同一条缓动曲线；几个元素是否在同一帧、以同一幅度齐动（应当错开先后、主次分明）；
   9. 上一个信息点读完之前，下一个是否已经开始抢视线。
