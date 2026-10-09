@@ -714,6 +714,7 @@ am review <候选成片> --scenes scenes/ --out production/review
 
 - 用 FFprobe、完整解码和 SHA-256 实测 `final.mp4`，填入实际规格和最终哈希；新视频与新哈希验证完成后才把 `video.replacement_in_progress` 恢复为 `false`。
 - 从真实项目文件填入发布平台、主标题、介绍、话题、已确认封面文字、素材署名和 evidence。署名必须由素材账本和授权证据支持，不得凭印象补写。
+- 主标题按发布平台的字数上限写：抖音不超过 30 个字，小红书不超过 20 个字（汉字、字母、标点都按一个字算）。同一条视频发多个平台时，在 `copy.platform_titles` 里按「平台: 标题」逐个写；`am validate publish` 会逐条核对字数，超长时报出实际字数。
 - 读取 `production/approval.json` 的 `expected_delivery.sha256`，并在存在时校验 `delivery_verification.actual_sha256`。它们必须与 `publish.md` 和实际成片哈希一致。
 - 可复用工具不得硬编码某个 revision 名称、旧总帧数、旧总采样数或旧候选哈希。当前合同值必须从活动的 `timing-report.json`、`phrase-timeline.json` 和 `approval.json` 推导；只有不可变备份的哈希可以显式冻结。
 - 将耳机、手机外放、封面预览、版权确认四项人工检查写入 `manual_checks`；机器检查不能代替人工检查。
