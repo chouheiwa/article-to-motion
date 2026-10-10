@@ -37,6 +37,29 @@ Landscape safe areas avoid the player's bottom controls and progress bar instead
 
 Non-interactive environments (CI, pipes) must pass `--canvas` explicitly; there is no silent default.
 
+### Local Studio workspace
+
+Launch the local web workspace to inspect project status and scenes:
+
+```bash
+am studio
+am studio /path/to/my-video
+am studio --listen 127.0.0.1:4317
+```
+
+Studio listens on loopback by default. For phone access, use your own Tailscale, VPN, or SSH tunnel and explicitly choose a listen address; Studio does not provide public accounts or HTTPS.
+
+The workspace exposes project state, scenes, assets, script browsing, AI chat, reviewable operations, snapshots and undo, task progress, and review reports. Mutations require a preview and confirmation; the project files remain the source of truth used by the CLI.
+
+The browser regression flow lives in `internal/studio/e2e/` and requires Node.js 22+:
+
+```bash
+cd internal/studio/e2e
+npm install
+npx playwright install chromium
+AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm test
+```
+
 ### Visual style
 
 Style is orthogonal to canvas and is also chosen once at init: the canvas fixes the frame and safe areas, the style fixes palette, fonts, layout archetypes, motion grammar and forbidden patterns. Pass `--style`, or pick interactively in a terminal; non-interactive runs without `--style` get the default `clear-system-blueprint-v1`.

@@ -11,6 +11,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  studio-e2e:
+    name: Studio browser E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.14'
+          cache: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install Playwright
+        working-directory: internal/studio/e2e
+        run: npm install --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Run Studio browser flow
+        working-directory: internal/studio/e2e
+        env:
+          AM_STUDIO_E2E_CONFIG: ${{ runner.temp }}/am-studio-projects.json
+        run: npm test
+
   test:
     name: test (${{ matrix.os }})
     strategy:

@@ -927,6 +927,7 @@ SVG 转 PNG 这一步不能用 ImageMagick 代替：多数 ImageMagick 构建自
 	root.AddCommand(newAlignCommand(stdout))
 	root.AddCommand(newCastCmd(stdout))
 	root.AddCommand(newDialogueCmd(stdout))
+	root.AddCommand(newStudioCommand(stdout, stderr))
 	return root
 }
 

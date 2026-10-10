@@ -37,6 +37,29 @@ cd my-video
 
 非交互环境（CI、管道）必须显式传入 `--canvas`，不会静默取默认值。
 
+### 本地 Studio 工作台
+
+可以启动一个本地网页工作台查看项目状态和镜头清单：
+
+```bash
+am studio                         # 浏览器打开后选择项目
+am studio /path/to/my-video       # 登记并直接打开项目
+am studio --listen 127.0.0.1:4317
+```
+
+默认只监听本机。需要手机访问时，请使用自己的 Tailscale、VPN 或 SSH 隧道，并显式指定监听地址；Studio 不提供公网账户或 HTTPS。
+
+工作台提供项目状态、镜头列表、镜头产物访问、脚本和资产浏览、AI 对话、结构化操作预览与确认、修改前快照、撤销、任务进度和审查报告接口。写操作必须先预览并确认，项目文件仍是 CLI 读取的权威来源。
+
+Studio 的浏览器回归测试位于 `internal/studio/e2e/`，需要 Node.js 22+：
+
+```bash
+cd internal/studio/e2e
+npm install
+npx playwright install chromium
+AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm test
+```
+
 ### 视觉风格
 
 风格与画幅正交，同样在初始化时一次性选定：画幅决定画布与安全区，风格决定配色、字体、版式骨架、动效语法与禁用项。用 `--style` 指定，不传时在终端里交互选择；非交互环境不传则取默认的清晰系统蓝图。
