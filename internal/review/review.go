@@ -207,12 +207,30 @@ func checkSync(report *Report, media mediaprobe.Media, tolerance float64) {
 		report.Hints = append(report.Hints, "容器没有声明音视频流各自的时长，未做音画时长比对")
 		return
 	}
-	if diff := math.Abs(video - audio); diff > tolerance {
+	diff := math.Abs(video - audio)
+	if diff > tolerance {
 		report.Problems = append(report.Problems, fmt.Sprintf(
 			"音画时长不一致：视频 %.3f 秒，音频 %.3f 秒，相差 %.3f 秒（容差 %.3f）",
 			video, audio, diff, tolerance))
+		return
+	}
+	// 容差之内仍超过一个 AAC 帧，说明音轨不是按节目总帧数精确导出的。
+	// AAC 编码的起始延迟只会造成几十个采样的偏差（HYPIT 实测 −16 与 −32），
+	// 一个 AAC 帧是 1024 个采样，超过它就不是编码器能解释的。只进 hints：
+	// 不同 ffmpeg 与编码器组合的偏差没有逐一实测，直接判失败会误伤。
+	rate := media.Audio.SampleRate
+	if rate <= 0 {
+		rate = 48000
+	}
+	if frame := float64(aacFrameSamples) / float64(rate); diff > frame {
+		report.Hints = append(report.Hints, fmt.Sprintf(
+			"音画时长相差 %.0f 个采样（%.3f 秒），超过一个 AAC 帧（%d 个采样）：音轨可能没有按节目总帧数精确导出，检查混音输出的采样数",
+			diff*float64(rate), diff, aacFrameSamples))
 	}
 }
+
+// aacFrameSamples 是一个 AAC 帧的采样数。
+const aacFrameSamples = 1024
 
 // checkLoudness 量成片的积分响度与真峰，与 frame.md 的目标比对。
 //

@@ -5,6 +5,7 @@ package scene
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -32,7 +33,7 @@ func environmentList(values map[string]string) []string {
 	return envutil.EnvList(values)
 }
 
-func Run(ctx context.Context, s Scene, cfg config.Config, unsafe bool, baseEnv map[string]string, userOutput io.Writer, tolerance float64) error {
+func Run(ctx context.Context, s Scene, cfg config.Config, unsafe bool, baseEnv map[string]string, userOutput io.Writer, tolerance float64) (err error) {
 	if !isFinite(tolerance) || tolerance < 0 {
 		return fmt.Errorf("tolerance 必须是有限且非负的数字")
 	}
@@ -60,6 +61,49 @@ func Run(ctx context.Context, s Scene, cfg config.Config, unsafe bool, baseEnv m
 		return err
 	}
 	argv[0] = binary
+	inputs, err := Fingerprint(s, renderer, resolvedSkills)
+	if err != nil {
+		return err
+	}
+	// 先挪走上一次的现场再截断日志；旧记录随即作废，本次通过校验后再写新的。
+	ArchiveAttempt(s)
+	if err := RemoveRecord(s); err != nil {
+		return err
+	}
+	// 局部时间数据在渲染器启动前写好：提示词让渲染器直接加载它，
+	// 不再自己从全片字幕里做减法。
+	if err := WriteSceneData(s); err != nil {
+		return err
+	}
+	started := time.Now()
+	attempt := Attempt{SceneID: s.ID, Renderer: renderer, Fingerprint: inputs.Fingerprint, StartedAt: timestamp(started), Retry: s.RetryNote != ""}
+	var usage tools.Usage
+	defer func() {
+		ended := time.Now()
+		attempt.EndedAt = timestamp(ended)
+		attempt.Seconds = ended.Sub(started).Seconds()
+		if !usage.Empty() {
+			attempt.Usage = &usage
+		}
+		var verification *VerificationError
+		switch {
+		case err == nil:
+			attempt.Outcome = OutcomeSucceeded
+		case errors.As(err, &verification):
+			attempt.Outcome = OutcomeVerificationFailed
+			attempt.Problems = verification.Problems
+		case ctx.Err() != nil:
+			attempt.Outcome = OutcomeInterrupted
+		default:
+			attempt.Outcome = OutcomeFailed
+		}
+		if err != nil {
+			attempt.Error = err.Error()
+		}
+		if writeErr := writeAttempt(s, attempt); writeErr != nil && err == nil {
+			err = writeErr
+		}
+	}()
 	rawFile, err := os.Create(s.StreamLog())
 	if err != nil {
 		return err
@@ -112,6 +156,7 @@ func Run(ctx context.Context, s Scene, cfg config.Config, unsafe bool, baseEnv m
 	for scanner.Scan() {
 		line := scanner.Text()
 		fmt.Fprintln(rawFile, line)
+		tools.AccumulateUsage(renderer, line, &usage)
 		for _, message := range tools.ExtractUserMessages(renderer, line) {
 			fmt.Fprintln(userFile, message)
 			fmt.Fprintln(userOutput, message)
@@ -127,11 +172,18 @@ func Run(ctx context.Context, s Scene, cfg config.Config, unsafe bool, baseEnv m
 	}
 	if waitErr != nil {
 		if exit, ok := waitErr.(*exec.ExitError); ok {
-			return fmt.Errorf("渲染器退出码 %d", exit.ExitCode())
+			code := exit.ExitCode()
+			attempt.ExitCode = &code
+			return fmt.Errorf("渲染器退出码 %d", code)
 		}
 		return waitErr
 	}
-	return VerifyOutput(s, baseEnv, tolerance)
+	zero := 0
+	attempt.ExitCode = &zero
+	if err := VerifyOutput(s, baseEnv, tolerance); err != nil {
+		return err
+	}
+	return WriteRecord(s, inputs)
 }
 
 // VerificationError 表示产物规格校验失败。
@@ -205,6 +257,20 @@ func VerifyOutput(s Scene, baseEnv map[string]string, tolerance float64) error {
 		Audio:           mediaprobe.AudioAbsent,
 	}
 	problems := spec.Check(media)
+	// 帧数逐帧解码实测，不靠时长容差兜：默认 0.15 秒的容差在 30fps 下能放过
+	// 差 4 帧的产物，要等拼接后整片复查才暴露，那时整批镜头都已渲染完。
+	// VerifyFrameAlignment 已保证时长是整数帧，这里的期望值没有取整歧义。
+	// 没有视频流时 spec.Check 已经报过，不再重复解码。
+	if media.Video != nil {
+		expected := int(math.Round(s.DurationSeconds * float64(canvas.FPS)))
+		counted, err := toolchain.CountFrames(path)
+		if err != nil {
+			problems = append(problems, err.Error())
+		} else if counted != expected {
+			problems = append(problems, fmt.Sprintf("总帧数不符：期望 %d 帧（%.6f 秒 × %dfps），逐帧解码实测 %d 帧",
+				expected, s.DurationSeconds, canvas.FPS, counted))
+		}
+	}
 	// 源码扫描与规格检查一起报：两类问题常同时出现，分两轮发现就要多烧一次渲染。
 	scan, err := determinism.Scan(s.Directory)
 	if err != nil {

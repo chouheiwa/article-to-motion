@@ -39,12 +39,13 @@
 | 技能 | 来源 |
 |---|---|
 | `hyperframes-*` 等官方技能 | `am init` 按固定版本联网安装到项目内 |
-| `text-to-lottie`、`algorithmic-art`、`character-rig` | 随 `am` 二进制下发 |
+| `text-to-lottie`、`algorithmic-art`、`character-rig`、`scene-kit` | 随 `am` 二进制下发 |
 
 - 缺任何一个都重跑 `am init` 补齐。**不要自己跑 `npx hyperframes skills`**：上游安装器只认 HOME，会装到本机而不是项目里，绕过版本固定，而且一台机器上只有一份技能——另一个固定了不同版本的项目会被它顶掉。
 - 不得从其他项目或本机目录复制技能，也不得升级、改写或删除任何一份已安装的技能。技能改动属于工具本体，不在单片项目里做。
 - 技能装在项目内意味着整个项目可以拷到另一台机器直接渲染，不依赖那台机器装过什么。
 - `am` 会把解析到的技能目录绝对路径写进渲染提示词。镜头锁定文件如果限制「只在本镜头目录内工作」，必须为项目根下的 `.agents/skills/` 留一条读取例外——它在项目内，但在镜头目录之外。漏了不报错：渲染器读不到动效 rule 索引，动画退化成只有淡入和位移；读不到 Lottie 技能则是该用的地方不用；读不到 `character-rig`，有角色的镜头就没有驱动库可复制，渲染器会自己发明一套不受 timeline 管的动画。
+- 画面内烧录的字幕一律用 `scene-kit` 技能的 `SceneKit.captions`，不手写字幕代码；版式按安全区取值用 `SceneKit.safeRect`，不手抄像素。`scene-kit.js` 要复制进镜头目录，并在镜头目录里的 `am-scene.js` 之后加载；`am-scene.js` 由 `am` 在渲染前生成，不要手写或改动。
 - Lottie 是可选项，默认不用。镜头主体是 HyperFrames 组合与其时间线；文字排版、数字滚动、图表、转场运镜一律不得交给 Lottie。Lottie 图层不计入镜头的动效预算，持续性环境动效也不得用 Lottie 循环顶替。细则以 `text-to-lottie` 技能的 `SKILL.md` 为准。
 - 渲染工具由配置解析，解析不到直接报错，不存在静默回退。需要单独指定时写进该镜头 `scene.json` 的 `renderer` 字段，不得临时换用其他渲染工具。
 

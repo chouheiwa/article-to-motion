@@ -37,6 +37,29 @@ cd my-video
 
 非交互环境（CI、管道）必须显式传入 `--canvas`，不会静默取默认值。
 
+### 本地 Studio 工作台
+
+可以启动一个本地网页工作台查看项目状态和镜头清单：
+
+```bash
+am studio                         # 浏览器打开后选择项目
+am studio /path/to/my-video       # 登记并直接打开项目
+am studio --listen 127.0.0.1:4317
+```
+
+默认只监听本机。需要手机访问时，请使用自己的 Tailscale、VPN 或 SSH 隧道，并显式指定监听地址；Studio 不提供公网账户或 HTTPS。
+
+工作台提供项目状态、镜头列表、镜头产物访问、脚本和资产浏览、AI 对话、结构化操作预览与确认、修改前快照、撤销、任务进度和审查报告接口。写操作必须先预览并确认，项目文件仍是 CLI 读取的权威来源。
+
+Studio 的浏览器回归测试位于 `internal/studio/e2e/`，需要 Node.js 22+：
+
+```bash
+cd internal/studio/e2e
+npm install
+npx playwright install chromium
+AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm test
+```
+
 ### 视觉风格
 
 风格与画幅正交，同样在初始化时一次性选定：画幅决定画布与安全区，风格决定配色、字体、版式骨架、动效语法与禁用项。用 `--style` 指定，不传时在终端里交互选择；非交互环境不传则取默认的清晰系统蓝图。
@@ -147,7 +170,24 @@ am scene run scenes/scene-001
 am scene run-all scenes/ --jobs 3 --retries 2 --report-json production/run-report.json
 ```
 
-已有合格产物会跳过；输入更新后的产物标记为 stale，使用 `--force` 明确重渲染。中断时停止新任务、终止在飞进程组，并写出部分报告。
+配音对齐不手工映射。终稿 `production/script-final.md` 里用 `<显示|朗读>` 标出显示与朗读不同的地方（如 `<2025年|二零二五年>`），用 `@{短语编号}…@{/短语编号}` 标出受保护短语；`am align text` 生成送进 TTS 与强制对齐的朗读文本，`am align build` 把对齐器的逐字结果匹配回终稿，写出 `voice.srt`、`phrase-timeline.json` 与对齐报告。受保护短语里有字对不上（TTS 漏读或对齐丢了）时报错并点出终稿行列号；确需修正短语边界时写进 `production/phrase-adjust.json`，每条带理由，叠加在测量结果上：
+
+```bash
+am align text                 # → production/audio/tts-text.txt
+am align build --fps 30       # 读 production/audio/align.json，分段时 --align align-02.json@312.48
+```
+
+镜头时长不手算。分镜计划 `production/scene-plan.json` 只写每个镜头从哪条字幕或哪个短语开始、切在空白的哪一侧，由 `am scene cues` 推出整数帧区间，写进各镜头的 `duration_seconds` 与 `timing` 块：
+
+```bash
+am scene cues --plan production/scene-plan.json --srt transcription-production.srt \
+  --phrases production/phrase-timeline.json --total-frames 5400 scenes/
+am scene cues --check ...   # 同样的参数，只核对不写，发现手改过的时长
+```
+
+渲染前 `am` 把镜头局部数据写成镜头目录里的 `am-scene.js`（`window.AM_SCENE`：画布、安全区、字幕规范、换算成镜头局部帧的字幕与短语），渲染提示词里同时附上局部时间表，渲染器不再自己从全片字幕里做减法。随 `am init` 下发的 `scene-kit` 技能读这份数据，提供按帧驱动的字幕组件 `SceneKit.captions`、`SceneKit.safeRect` 与缓动、淡入淡出、固定种子随机数等工具，免得每个镜头各写一套字幕代码。
+
+已有合格产物且输入没变的镜头会跳过。产物通过校验时，`am` 把输入指纹记在镜头目录的 `.am-render.json`：组好的渲染提示词、`scene.json`、`prompt.md`、字幕、视觉规范、角色包、渲染工具、技能内容与 `am` 版本，逐项记摘要。输入变了的镜头标记为 stale，报告里写明是哪几项变了，使用 `--force` 明确重渲染；没有记录的老产物仍按修改时间判定。每次渲染尝试写一份 `render-<镜头编号>.attempt.json`（耗时、结果、退出码、能读到时的 token 用量），重跑前上一次的产物与日志先归档进 `attempts/`。中断时停止新任务、终止在飞进程组，并写出部分报告。
 
 ## 多角色叙事
 
@@ -206,9 +246,9 @@ am concat scenes/ --out production/silent-master.mp4
 
 `am concat` 不提供重定时能力。分辨率或帧率与母版不符时直接失败并要求回镜头工程重渲染，而不是缩放或改帧率——前者损失画质，后者会动到时间轴。
 
-镜头产物校验除了画幅、帧率、时长与无音轨，还会扫描渲染实际加载的 HTML/JS/CSS：读时钟、`Math.random()`、`requestAnimationFrame`、`setInterval`、无限 `repeat`、渲染时联网、在线字体与未固定版本的 CDN 库都会让同一帧在两次渲染间不同，命中即判失败且不重试。渲染路径确实不经过的交互代码可在同一行注释写 `am-allow-nondeterministic: 理由` 豁免，豁免项照样写进报告。
+镜头产物校验除了画幅、帧率、时长与无音轨，还逐帧解码核对总帧数（时长容差能放过差几帧的产物），并扫描渲染实际加载的 HTML/JS/CSS：读时钟、`Math.random()`、`requestAnimationFrame`、`setInterval`、无限 `repeat`、渲染时联网、在线字体与未固定版本的 CDN 库都会让同一帧在两次渲染间不同；`@font-face` 指向镜头目录里不存在的文件、或 `font-display` 写成 `swap` / `fallback` / `optional`，会让字体静默回退。命中即判失败且不重试。渲染路径确实不经过的交互代码可在同一行注释写 `am-allow-nondeterministic: 理由` 豁免，豁免项照样写进报告。
 
-`am scene run-all` 按镜头时长从长到短派发，避免排在末尾的长镜头独自拖长整批耗时；并发渲染时按 `(CPU 核数 - 2) / 并发数` 给每个镜头分配 HyperFrames 的 `--workers`，免得几个渲染各自按独占整机估算、合起来超订 CPU 和内存。
+`am scene run-all` 按镜头时长从长到短派发，避免排在末尾的长镜头独自拖长整批耗时；并发渲染时按 `(CPU 核数 - 2) / 并发数` 给每个镜头分配 HyperFrames 的 `--workers`，并按「一半物理内存 ÷ 每个 Chrome 1.5GB ÷ 并发数」封顶，免得几个渲染各自按独占整机估算、合起来超订 CPU 和内存。
 
 ## 平台封面
 
@@ -247,7 +287,7 @@ am validate reads
 am audio check --audio production/audio/voice.wav --srt production/audio/voice.srt
 
 # 整片复查：音画时长、总帧数与镜头帧数之和、镜头交界帧，按镜头生成联系表，每个交界出一张逐帧条带；
-# 有音轨时实测成片积分响度与真峰，偏离 frame.md 目标只作提示
+# 有音轨时实测成片积分响度与真峰，偏离 frame.md 目标只作提示；音画差超过一个 AAC 帧（1024 采样）也只作提示
 am review final.mp4 --scenes scenes/ --out production/review
 
 am archive --dry-run

@@ -287,3 +287,20 @@ func TestLoudnessSkippedWhenSilentAndUncomparedWithoutTarget(t *testing.T) {
 		t.Fatalf("没有目标时只记录实测值：%+v, %v", report, err)
 	}
 }
+
+// TestSyncBeyondOneAACFrameIsAHint：容差之内但超过一个 AAC 帧的音画差只提示。
+func TestSyncBeyondOneAACFrameIsAHint(t *testing.T) {
+	p := &fakeProber{media: media(4, 4.05, true), frames: 120}
+	report, err := Run(p, Options{Video: "final.mp4", FPS: 30, Segments: segments(), OutDir: "out"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.OK || !strings.Contains(strings.Join(report.Hints, "\n"), "超过一个 AAC 帧") {
+		t.Fatalf("应只进 hints：%+v", report)
+	}
+	healthy := &fakeProber{media: media(4, 4.02, true), frames: 120}
+	report, _ = Run(healthy, Options{Video: "final.mp4", FPS: 30, Segments: segments(), OutDir: "out"})
+	if strings.Contains(strings.Join(report.Hints, "\n"), "AAC") {
+		t.Fatalf("一个 AAC 帧以内不应提示：%v", report.Hints)
+	}
+}

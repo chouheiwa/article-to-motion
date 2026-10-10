@@ -302,6 +302,68 @@ func (s *scanner) scanCSS(src source, css string, base int) {
 		value, start := submatch(css, m)
 		s.reference(src, base+start, value)
 	}
+	s.scanFontFaces(src, css, base)
+}
+
+var (
+	fontFaceBlock = regexp.MustCompile(`(?is)@font-face\s*\{([^}]*)\}`)
+	fontDisplay   = regexp.MustCompile(`(?i)\bfont-display\s*:\s*([a-z-]+)`)
+)
+
+// scanFontFaces 检查 @font-face 的两类确定性问题。
+//
+// 渲染机是没有系统字体的无头 Chrome，并行抽帧：
+//   - src 指向镜头目录里不存在的文件：请求静默 404，字体回退，渲染照样成功；
+//   - font-display 显式写成 swap / fallback / optional：字体没就绪时先画回退字体，
+//     并行的几个抽帧进程各自赶上不同的时机，同一镜头里一部分帧是错的字形。
+//
+// 没写 font-display 不报：缺省值 auto 在 Chrome 里按 block 处理。local() 也不报：
+// 常见写法是 local() 后面跟一个 url() 兜底，只看 local() 会误判。
+func (s *scanner) scanFontFaces(src source, css string, base int) {
+	for _, block := range fontFaceBlock.FindAllStringSubmatchIndex(css, -1) {
+		body := css[block[2]:block[3]]
+		if m := fontDisplay.FindStringSubmatchIndex(body); m != nil {
+			if value := strings.ToLower(body[m[2]:m[3]]); value != "block" && value != "auto" {
+				s.add(src, base+block[2]+m[0], "font-display",
+					"@font-face 使用了 font-display: "+value+"；并行抽帧时部分帧会抓到回退字体，请改为 block")
+			}
+		}
+		for _, m := range cssURL.FindAllStringSubmatchIndex(body, -1) {
+			value, start := submatch(body, m)
+			if missing := s.missingLocalFile(src, value); missing != "" {
+				s.add(src, base+block[2]+start, "font-missing",
+					"@font-face 的字体文件不在镜头目录里（"+missing+"）；渲染时静默 404，字体回退且不报错")
+			}
+		}
+	}
+}
+
+// missingLocalFile 返回 ref 解析后不存在的本地路径；远程、内联或无法静态求值的引用返回空串。
+func (s *scanner) missingLocalFile(src source, ref string) string {
+	ref = strings.TrimSpace(ref)
+	if isIgnoredRef(ref) || isRemote(ref) {
+		return ""
+	}
+	target := ref
+	if cut := strings.IndexAny(target, "?#"); cut >= 0 {
+		target = target[:cut]
+	}
+	if target == "" || strings.Contains(target, ":") {
+		return ""
+	}
+	var resolved string
+	if strings.HasPrefix(target, "/") {
+		resolved = path.Clean(strings.TrimPrefix(target, "/"))
+	} else {
+		resolved = path.Clean(path.Join(path.Dir(src.rel), target))
+	}
+	if resolved == "." || resolved == ".." || strings.HasPrefix(resolved, "../") {
+		return resolved
+	}
+	if isRegular(filepath.Join(s.root, filepath.FromSlash(resolved))) {
+		return ""
+	}
+	return resolved
 }
 
 // submatch 返回第一个非空捕获组及其起点。

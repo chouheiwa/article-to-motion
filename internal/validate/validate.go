@@ -151,6 +151,9 @@ func Publish(path, projectRoot string) (map[string]any, error) {
 	if err := validateCoverImages(projectRoot, data); err != nil {
 		return nil, err
 	}
+	if err := validateCopyTitles(data); err != nil {
+		return nil, err
+	}
 	for _, heading := range []string{"## 发布状态", "## 发布平台", "## 主标题", "## 发布介绍", "## 话题标签", "## 封面文字", "## 素材署名", "## 成片规格与 SHA-256", "## 证据索引", "## 发布前人工检查", "## 未完成事项"} {
 		if !strings.Contains(body, heading) {
 			return nil, fmt.Errorf("markdown 缺少章节：%s", heading)

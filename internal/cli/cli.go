@@ -164,6 +164,7 @@ func ExecuteContext(ctx context.Context, args []string, stdout, stderr io.Writer
 
 func newRoot(stdout, stderr io.Writer) *cobra.Command {
 	unsafe := false
+	scene.ToolVersion = Version
 	root := &cobra.Command{
 		Use:   "am",
 		Short: "ArticleToMotion 竖屏 MG 视频制作工具",
@@ -502,10 +503,14 @@ text 不得含 [[USER_MESSAGE]] 或 <scene-text> 定界标记，含则失败。
 		Long: `并发渲染 ROOT 下的所有镜头。镜头之间无创作依赖，跨镜头视觉一致性由 frame.md 保证。
 
 每个镜头开跑前先判定状态，判定结果直接决定要不要重渲染：
-  已有合格产物   产物存在且通过时长校验 → 跳过
-  Stale         scene.json 或 prompt.md 的修改时间晚于产物 → 不自动重渲染，
-                标记为需要显式 --force，避免悄悄覆盖人工确认过的成片
+  已有合格产物   产物存在、通过校验，且输入指纹与产物的渲染记录一致 → 跳过
+  Stale         产物合格但输入变了 → 不自动重渲染，标记为需要显式 --force，
+                避免悄悄覆盖人工确认过的成片；报告里写明是哪几项输入变了
   其余           渲染
+
+输入指纹覆盖组好的渲染提示词、scene.json、prompt.md、字幕、视觉规范、角色包、
+渲染工具、技能内容与 am 版本，产物通过校验时记在镜头目录的 .am-render.json。
+没有渲染记录的老产物退回旧判定：scene.json 或 prompt.md 的修改时间晚于产物即 Stale。
 
 --force 跳过全部上述判定，无条件重渲染每个镜头。
 
@@ -612,6 +617,9 @@ AI CLI 调用。这类失败要先改提示词或时长声明再重跑。
 				if err := scene.VerifyBeatInputs(s); err != nil {
 					return err
 				}
+				if err := scene.VerifyTimingInputs(s); err != nil {
+					return err
+				}
 			}
 			if beat.Enabled(".") {
 				if err := beatCoverage(".", scenes); err != nil {
@@ -628,18 +636,7 @@ AI CLI 调用。这类失败要先改提示词或时长声明再重跑。
 					if verifyErr := scene.VerifyOutput(item, env, tolerance); verifyErr != nil {
 						continue
 					}
-					outputInfo, statErr := os.Stat(item.OutputPath())
-					if statErr != nil {
-						continue
-					}
-					status := schedule.Skipped
-					reason := "已有合格产物"
-					for _, input := range []string{filepath.Join(item.Directory, "scene.json"), filepath.Join(item.Directory, "prompt.md")} {
-						if info, statErr := os.Stat(input); statErr == nil && info.ModTime().After(outputInfo.ModTime()) {
-							status, reason = schedule.Stale, "输入比产物新，需要显式 --force 重渲染"
-							break
-						}
-					}
+					status, reason := reuseDecision(item, cfg, env)
 					initial[item.ID] = schedule.Outcome(status, reason)
 				}
 			}
@@ -648,7 +645,7 @@ AI CLI 调用。这类失败要先改提示词或时长声明再重跑。
 			// 是实打实的数据竞争，写 os.Stdout 时则表现为几镜的进度输出互相交错。
 			progress := &syncWriter{writer: stdout}
 			// 已跳过的镜头不占渲染并发，worker 按真正要渲染的镜头数分。
-			workers := schedule.RenderWorkers(runtime.NumCPU(), min(jobs, len(scenes)-len(initial)))
+			workers := schedule.RenderWorkers(runtime.NumCPU(), schedule.SystemMemory(), min(jobs, len(scenes)-len(initial)))
 			report := schedule.RunAll(cmd.Context(), scenes, jobs, retries, func(ctx context.Context, s scene.Scene) error {
 				if outcome, ok := initial[s.ID]; ok {
 					return outcome
@@ -686,6 +683,7 @@ AI CLI 调用。这类失败要先改提示词或时长声明再重跑。
 	runAll.Flags().BoolVar(&strictCoverage, "strict-coverage", false, "覆盖校验不通过时直接失败，而不是只打印警告")
 	sceneCmd.AddCommand(runAll)
 	sceneCmd.AddCommand(newSceneFramesCommand(stdout))
+	sceneCmd.AddCommand(newSceneCuesCommand(stdout))
 	sceneCmd.AddCommand(newSceneLintCommand(stdout))
 	root.AddCommand(sceneCmd)
 
@@ -926,8 +924,10 @@ SVG 转 PNG 这一步不能用 ImageMagick 代替：多数 ImageMagick 构建自
 	root.AddCommand(newAudioCmd(stdout))
 	root.AddCommand(newSongCmd(stdout))
 	root.AddCommand(newBeatCommand(stdout))
+	root.AddCommand(newAlignCommand(stdout))
 	root.AddCommand(newCastCmd(stdout))
 	root.AddCommand(newDialogueCmd(stdout))
+	root.AddCommand(newStudioCommand(stdout, stderr))
 	return root
 }
 

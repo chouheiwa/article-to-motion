@@ -382,3 +382,79 @@ func TestProductionPromptRequiresPlatformCovers(t *testing.T) {
 		}
 	}
 }
+
+// 整片处理方案是分镜与每个镜头 prompt.md 的上游；它若开始重新定义配色和字体，
+// 就会和 frame.md 争夺视觉一致性的唯一来源。
+func TestProductionPromptCarriesTreatment(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{
+		"### 整片处理方案",
+		"production/treatment.md",
+		"钩子—揭示—收束",
+		"持续物件",
+		"配色、字体、安全区和版式骨架仍由 `frame.md` 管，`treatment.md` 不得重新定义它们",
+		"先改 `treatment.md`",
+		"- `production/treatment.md` 整片处理方案",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 的整片处理方案缺少 %q", want)
+		}
+	}
+	if strings.Index(body, "### 整片处理方案") > strings.Index(body, "## 第三阶段") {
+		t.Error("整片处理方案必须在第三阶段（TTS）之前")
+	}
+}
+
+// 镜头各自渲染、互相看不到，跨镜头交接只能靠 prompt.md 里写明的入场与出场状态，
+// 整片复查要拿 seam-NN.png 对这两段约定。
+func TestProductionPromptDeclaresSceneHandoff(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{
+		"在 `prompt.md` 中写明镜头交接：入场状态",
+		"出场状态（最后一帧留给下一镜头",
+		"声明的出场状态与入场状态",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 缺少镜头交接约定 %q", want)
+		}
+	}
+}
+
+// amix 默认按输入路数压低每一路，混音偏小后只能靠响度规范化硬拉。
+func TestProductionPromptMixesWithoutAmixNormalize(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{"`amix`", "`normalize=0`", "`event_id`", "`phrase_id`"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 的声音设计缺少 %q", want)
+		}
+	}
+}
+
+// TestProductionPromptAlignsWithCode 钉住第四阶段：对齐结果由 am align 映射回终稿，
+// 不再让人按替换清单手工对回、手写短语帧号。
+func TestProductionPromptAlignsWithCode(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{"`am align text`", "am align build", "`<显示|朗读>`", "`@{短语编号}", "phrase-adjust.json"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 的对齐流程缺少 %q", want)
+		}
+	}
+	for _, banned := range []string{"按替换清单映射回终稿原文", "按顺序与原文逐字对回"} {
+		if strings.Contains(body, banned) {
+			t.Errorf("PROMPT-PRODUCTION.md 仍要求手工映射：%q", banned)
+		}
+	}
+}
+
+// TestProductionPromptDerivesSceneDurations 钉住第五、六阶段：镜头时长由 am scene cues 推出。
+func TestProductionPromptDerivesSceneDurations(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{"am scene cues --plan production/scene-plan.json", "`first_subtitle`", "`first_phrase`", "--check", "am-scene.js", "`scene-kit`"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 的镜头时长流程缺少 %q", want)
+		}
+	}
+	if strings.Contains(body, "每个镜头先定帧数，再写 `duration_seconds = 帧数 ÷ 帧率`") {
+		t.Error("PROMPT-PRODUCTION.md 仍要求手算镜头时长")
+	}
+}

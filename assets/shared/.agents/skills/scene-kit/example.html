@@ -1,0 +1,89 @@
+<!doctype html>
+<!--
+  scene-kit 最小示例。用法：把本文件当作写法参考，不要整份复制成镜头入口。
+  镜头目录里需要：am 写好的 am-scene.js、从技能目录复制来的 scene-kit.js、
+  frame.md 要求的字体文件（下面的 @font-face 只是占位写法）。
+  data-width / data-height / data-duration 必须与 am-scene.js 里的
+  width_px / height_px / duration_seconds 一致，按本镜头的实际值改写。
+-->
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>scene-kit example</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="am-scene.js"></script>
+    <script src="scene-kit.js"></script>
+    <style>
+      @font-face {
+        font-family: "Noto Sans SC";
+        font-weight: 600;
+        src: url("assets/fonts/noto-sans-sc-600.woff2") format("woff2");
+        font-display: block;
+      }
+      body { margin: 0; }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #fff8ec;
+        font-family: "Noto Sans SC", sans-serif;
+        font-weight: 600;
+      }
+      #headline {
+        position: absolute;
+        margin: 0;
+        font-size: 72px;
+        color: #1b2240;
+      }
+      #note {
+        position: absolute;
+        margin: 0;
+        font-size: 44px;
+        color: #4a5578;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="10">
+      <h1 id="headline">按帧驱动，任意 seek</h1>
+      <p id="note">同一帧永远是同一张画面</p>
+    </div>
+    <script>
+      (function () {
+        var K = window.SceneKit;
+        var root = document.getElementById('root');
+        var headline = document.getElementById('headline');
+        var note = document.getElementById('note');
+
+        // 版式取自安全区，不手抄像素。标题从第 0 帧起就是完成态（封面帧）。
+        var area = K.safeRect('critical_text');
+        headline.style.left = area.left + 'px';
+        headline.style.top = area.top + 'px';
+        headline.style.maxWidth = area.width + 'px';
+        note.style.left = area.left + 'px';
+        note.style.top = area.top + 120 + 'px';
+        note.style.maxWidth = area.width + 'px';
+
+        // 字幕：一层 DOM，按帧显示当前字幕。
+        var subs = K.captions(root, { tailFrames: 6 });
+
+        // 注释跟着短语帧走：短语 "proof" 开始时入场，到位后保持不动供阅读。
+        // 短语 id 以本镜头 am-scene.js 的 phrases 为准，写错会直接抛错。
+        var proof = K.phrase('proof');
+
+        function render(frame) {
+          var p = K.ease('cubicOut', K.progress(frame, proof.start_frame, proof.start_frame + 12));
+          note.style.opacity = String(p);
+          note.style.transform = 'translateY(' + K.lerp(32, 0, p) + 'px)';
+          subs.render(frame);
+        }
+
+        var tl = gsap.timeline({ paused: true });
+        K.attach(tl, render);
+        window.__timelines['main'] = tl;
+      })();
+    </script>
+  </body>
+</html>
