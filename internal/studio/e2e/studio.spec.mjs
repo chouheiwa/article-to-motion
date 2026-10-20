@@ -6,7 +6,7 @@ import path from 'node:path';
 let project;
 
 test.beforeEach(async () => {
-  project = await fs.mkdtemp(path.join(os.tmpdir(), 'am-studio-e2e-'));
+  project = await fs.mkdtemp(path.join(process.env.HOME || os.homedir(), 'am-studio-e2e-'));
   const scene = path.join(project, 'scenes', 'scene-001');
   await fs.mkdir(scene, { recursive: true });
   await fs.writeFile(path.join(scene, 'voice.srt'), '1\n00:00:00,000 --> 00:00:01,000\nhello\n');
@@ -19,7 +19,8 @@ test.afterEach(async () => { await fs.rm(project, { recursive: true, force: true
 
 test('opens a project, selects a scene, asks AI, confirms the operation, and observes the task', async ({ page }) => {
   await page.goto('/');
-  await page.locator('#project-path').fill(project);
+  await page.locator('#open-project-trigger').click();
+  await page.locator('.directory-row.project-row', { hasText: path.basename(project) }).click();
   await page.locator('#open-project').click();
   await expect(page.locator('#title')).toContainText(path.basename(project));
   await page.locator('.scene', { hasText: 'scene-001' }).click();
