@@ -97,7 +97,7 @@ func (s *Server) loadRegistry() error {
 		return fmt.Errorf("读取 Studio 项目登记失败：%w", err)
 	}
 	if err := json.Unmarshal(body, &s.projects); err != nil {
-		return fmt.Errorf("Studio 项目登记损坏：%w", err)
+		return fmt.Errorf("项目登记损坏（Studio）：%w", err)
 	}
 	if s.projects.Schema == 0 {
 		s.projects.Schema = 1
