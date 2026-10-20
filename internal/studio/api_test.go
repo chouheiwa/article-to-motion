@@ -355,7 +355,9 @@ func TestStudioContentAndTaskEndpoints(t *testing.T) {
 	sceneTwo := filepath.Join(root, "scenes", "scene-002")
 	writeStudioFile(t, filepath.Join(sceneTwo, "scene.json"), `{"id":"scene-002","duration_seconds":1,"output":"missing.mp4"}`)
 	writeStudioFile(t, filepath.Join(root, "SCRIPT.md"), "script body")
-	writeStudioFile(t, filepath.Join(root, "script.md"), "lower script")
+	// macOS 的默认文件系统大小写不敏感，不能再写一份小写 script.md：
+	// 两者会落到同一个文件并互相覆盖。render 阶段改由 transcription.srt 触发。
+	writeStudioFile(t, filepath.Join(root, "transcription.srt"), "1\n00:00:00,000 --> 00:00:01,000\nline\n")
 	writeStudioFile(t, filepath.Join(root, "assets", "logo.txt"), "logo")
 	writeStudioFile(t, filepath.Join(root, "cast", "char.txt"), "cast")
 	writeStudioFile(t, filepath.Join(root, "publish.md"), "# publish")

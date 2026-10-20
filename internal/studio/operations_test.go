@@ -116,6 +116,13 @@ func TestApplyOperationFileEdits(t *testing.T) {
 
 func TestSnapshotForAndRestore(t *testing.T) {
 	root := t.TempDir()
+	// openProject 会把路径规范化（macOS 上是 /var → /private/var），
+	// 快照里记录的是规范化后的路径，断言也要用同一份。
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root = resolvedRoot
 	scenePath := filepath.Join(root, "scenes", "scene-001", "scene.json")
 	writeStudioFile(t, scenePath, `{"id":"scene-001","duration_seconds":1,"output":"out.mp4"}`)
 	planPath := filepath.Join(root, "production", "scene-plan.json")
