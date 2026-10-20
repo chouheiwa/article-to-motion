@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	assets "github.com/chouheiwa/articale-to-motion"
+	"github.com/chouheiwa/articale-to-motion/internal/preset"
 	"github.com/chouheiwa/articale-to-motion/internal/scene"
 	"github.com/chouheiwa/articale-to-motion/internal/schedule"
 	"github.com/chouheiwa/articale-to-motion/internal/song"
@@ -43,7 +44,7 @@ func TestSongCuesAndValidationBothCanvases(t *testing.T) {
 		t.Run(canvas, func(t *testing.T) {
 			root := t.TempDir()
 			var out bytes.Buffer
-			if code := Execute([]string{"init", root, "--canvas", canvas, "--skip-hyperframes", "--delivery", "song"}, &out, &out); code != 0 {
+			if code := Execute([]string{"init", root, "--canvas", canvas, "--style", preset.DefaultStyle().ID, "--skip-hyperframes", "--delivery", "song"}, &out, &out); code != 0 {
 				t.Fatal(out.String())
 			}
 			dir := filepath.Join(root, song.Store, "candidates", "chosen")

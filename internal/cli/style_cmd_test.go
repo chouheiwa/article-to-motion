@@ -59,8 +59,8 @@ func TestStyleAddFontCopiesFontAndLicense(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "assets", "fonts", preset.FontFredoka600.File)); err == nil {
 		t.Error("指定字重时不应拷入其他字重")
 	}
-	if !strings.Contains(out.String(), "font_files") {
-		t.Errorf("输出应提示把字体写进 typography.font_files：%s", out.String())
+	if !strings.Contains(out.String(), "assets/fonts/") {
+		t.Errorf("输出应列出字体相对路径：%s", out.String())
 	}
 	// 重复执行是幂等的。
 	out.Reset()
@@ -105,7 +105,7 @@ func TestStyleAddFontRejectsUnknownAndConflicts(t *testing.T) {
 	}
 }
 
-// 端到端：init 自定义风格 → 模拟定风格阶段填好 token、画好 SVG →
+// 端到端：旧版 init 自定义风格 → 模拟补齐兼容文件、画好 SVG →
 // --regenerate-examples 渲染 PNG → validate style 通过。草稿阶段就能出图，
 // 否则示例图要等 validate 通过才能生成，而 validate 又要先有示例图。
 func TestCustomStyleEndToEnd(t *testing.T) {
@@ -144,7 +144,7 @@ func TestCustomStyleEndToEnd(t *testing.T) {
 	if code := Execute([]string{"validate", "style", "--project-root", target, "--regenerate-examples"}, &out, &out); code != 0 {
 		t.Fatalf("regenerate + validate exit %d: %s", code, out.String())
 	}
-	if !strings.Contains(out.String(), "风格规范校验通过") {
+	if !strings.Contains(out.String(), "旧版风格文件校验通过") {
 		t.Fatalf("应校验通过：%s", out.String())
 	}
 }

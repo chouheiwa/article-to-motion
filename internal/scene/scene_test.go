@@ -92,13 +92,12 @@ func TestBuildPromptUsesCreativeBodyAndStyleGuide(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompt, err := BuildPrompt(s, nil)
-	if err != nil || !strings.Contains(prompt, "CUSTOM CREATIVE") || !strings.Contains(prompt, "视觉规范") {
+	if err != nil || !strings.Contains(prompt, "CUSTOM CREATIVE") || !strings.Contains(prompt, "视觉自由度") {
 		t.Fatalf("prompt=%s err=%v", prompt, err)
 	}
-	// 渲染机没有本机系统字体，字体自带文件这条必须进执行契约而不是只写在文档里。
-	for _, want := range []string{"@font-face", "font_files", "font-display: block"} {
-		if !strings.Contains(prompt, want) {
-			t.Errorf("style guide prompt missing %q", want)
+	for _, banned := range []string{"font_files", "scene_archetypes", "display_stack", "视觉规范（强制）"} {
+		if strings.Contains(prompt, banned) {
+			t.Errorf("style guide 不应再注入视觉约束 %q", banned)
 		}
 	}
 }

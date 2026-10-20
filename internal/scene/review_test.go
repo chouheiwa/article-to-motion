@@ -34,7 +34,7 @@ func TestBuildPromptRequiresSnapshotSelfReview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"画面自查（强制", "snapshot --at", "--describe false", "至少完成一轮", "越出视觉规范的安全区"} {
+	for _, want := range []string{"画面自查（强制", "snapshot --at", "--describe false", "至少完成一轮", "越出画布安全区"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("提示词缺少 %q", want)
 		}
@@ -59,19 +59,24 @@ func TestHyperFramesCLIPromptAllowsSnapshot(t *testing.T) {
 }
 
 // TestHyperFramesCreativePromptStaysWithinSingleScene：上游 creative 技能还覆盖
-// 选色板、选字体、design-picker 与整片节拍，这些由 frame.md 与上层决定。
+// 整片节拍；本项目只把它当作可选的单镜头构图参考，视觉方向保持自由。
 func TestHyperFramesCreativePromptStaysWithinSingleScene(t *testing.T) {
 	for _, dir := range []string{"", "/proj/.agents/skills"} {
 		section := hyperFramesCreativePrompt(dir)
-		for _, want := range []string{"house-style.md", "video-composition.md", "design-adherence.md", "不另选色板", "design-picker", "不做整片规划"} {
+		for _, want := range []string{"house-style.md", "video-composition.md", "design-adherence.md", "可选的构图参考", "配色、字体、版式与动效由当前镜头自主决定", "不做整片规划"} {
 			if !strings.Contains(section, want) {
 				t.Errorf("skillsDir=%q 时，creative 提示词缺少 %q：\n%s", dir, want, section)
+			}
+		}
+		for _, banned := range []string{"不另选色板", "design-picker", "以视觉规范为准"} {
+			if strings.Contains(section, banned) {
+				t.Errorf("skillsDir=%q 时，creative 提示词仍限制视觉选择 %q：\n%s", dir, banned, section)
 			}
 		}
 	}
 }
 
-// TestBuildPromptPointsAtStyleExamples：示例图是渲染器唯一的视觉参照。
+// TestBuildPromptIgnoresStyleExamples：风格示例不再成为渲染器的强制参照。
 func TestBuildPromptPointsAtStyleExamples(t *testing.T) {
 	dir := writeScene(t, `{"id":"scene-001","duration_seconds":1,"output":"out.mp4","transcript":"transcript.srt","text":"hello","style_guide":"frame.md"}`)
 	os.WriteFile(filepath.Join(dir, "frame.md"), []byte(frameWithCanvas(1080, 1920)), 0o644)
@@ -83,9 +88,9 @@ func TestBuildPromptPointsAtStyleExamples(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"scene_archetypes", "example_png", "不照抄", "display_stack"} {
-		if !strings.Contains(prompt, want) {
-			t.Errorf("提示词缺少 %q", want)
+	for _, banned := range []string{"scene_archetypes", "example_png", "不照抄", "display_stack"} {
+		if strings.Contains(prompt, banned) {
+			t.Errorf("提示词不应引用风格示例 %q", banned)
 		}
 	}
 }

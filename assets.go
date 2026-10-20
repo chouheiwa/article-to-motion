@@ -12,7 +12,7 @@ import (
 //
 //	assets/shared/                 与画幅、风格都无关，所有项目共用
 //	assets/presets/<画幅>/          只随画幅变化（由 go generate 产出）
-//	assets/styles/<风格>/<画幅>/    风格 × 画幅（文本由 go generate 产出，示例图手绘）
+	//	assets/styles/<风格>/<画幅>/    可选风格包 × 画幅（文本由 go generate 产出，示例图手绘）
 //
 // 每棵树的内部路径就是它在项目根下的目标路径，Initialize 直接叠加拷贝，
 // 不做任何路径改写。

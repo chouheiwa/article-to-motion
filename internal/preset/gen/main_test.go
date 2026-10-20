@@ -362,14 +362,16 @@ func TestSubstituteCanvasRejectsUnknownPlaceholder(t *testing.T) {
 	}
 }
 
-// 自定义风格的草稿只有靠编排提示词里的定风格阶段才会被定稿；这一节被删掉，
-// 项目会卡在 scene.Load 的草稿拦截上，而编排工具不知道该做什么。
-func TestProductionPromptCarriesCustomStyleStage(t *testing.T) {
+// 视觉风格完全由镜头创作决定，编排提示词不能再把定风格阶段设为前置条件。
+func TestProductionPromptLeavesStyleFree(t *testing.T) {
 	body := loadProduction()
-	for _, want := range []string{preset.DraftStyleID, "docs/style-brief.md", "am style add-font", "am validate style --regenerate-examples", "mood_refs", "$imagegen", preset.CustomStyle.GuideDoc()} {
-		if !strings.Contains(body, want) {
-			t.Errorf("PROMPT-PRODUCTION.md 的定风格阶段缺少 %q", want)
+	for _, banned := range []string{"定风格（仅自定义风格）", "custom-draft", "docs/style-brief.md", "am style add-font", "am validate style --regenerate-examples", "docs/自定义-视频风格说明书.md"} {
+		if strings.Contains(body, banned) {
+			t.Errorf("PROMPT-PRODUCTION.md 不应再包含风格前置约束 %q", banned)
 		}
+	}
+	if !strings.Contains(body, "视觉风格不由项目预设或字段锁定") {
+		t.Error("PROMPT-PRODUCTION.md 未声明视觉风格自由")
 	}
 }
 
@@ -392,7 +394,7 @@ func TestProductionPromptCarriesTreatment(t *testing.T) {
 		"production/treatment.md",
 		"钩子—揭示—收束",
 		"持续物件",
-		"配色、字体、安全区和版式骨架仍由 `frame.md` 管，`treatment.md` 不得重新定义它们",
+		"配色、字体、版式和动效由各镜头根据文案自由决定",
 		"先改 `treatment.md`",
 		"- `production/treatment.md` 整片处理方案",
 	} {

@@ -60,49 +60,13 @@ npx playwright install chromium
 AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm test
 ```
 
-### 视觉风格
+### 视觉方向
 
-风格与画幅正交，同样在初始化时一次性选定：画幅决定画布与安全区，风格决定配色、字体、版式骨架、动效语法与禁用项。用 `--style` 指定，不传时在终端里交互选择；非交互环境不传则取默认的清晰系统蓝图。
+项目不再预设或锁定视觉风格。画幅、帧率和渲染确定性仍由工具保证；配色、字体、版式、材质和动效由模型根据本片内容与每个镜头自主决定，镜头之间可以使用不同的视觉语言。
 
-```bash
-am init my-video --canvas vertical-9x16 --style pixel-arcade-v1
-```
+`frame.md`、`style_guide` 和旧版内置风格包只为兼容已有项目保留，不会进入新的渲染提示词，也不会作为渲染前置校验。需要参考图、字体或 GSAP 代码时，把它们复制进对应镜头目录即可。
 
-| 风格 | 名称 | 适合 |
-|---|---|---|
-| `clear-system-blueprint-v1` | 清晰系统蓝图 | 默认；知识、技术与产品机制讲解 |
-| `pixel-arcade-v1` | 像素街机 | 8/16-bit 复古游戏、怀旧、入门科普 |
-| `scifi-hud-v1` | 科幻 HUD | 航天、硬件、系统架构、任务式讲解 |
-| `cyberpunk-glitch-v1` | 赛博故障 | 安全攻防、黑客叙事、反差观点 |
-| `candy-casual-v1` | 糖果休闲 | 轻松科普、生活技巧、成长激励 |
-| `rebel-graphic-v1` | 二次元锐利拼贴 | 强观点、排行、角色化表达 |
-| `fantasy-quest-v1` | 奇幻羊皮卷 | 历史、故事、学习路线、世界观 |
-| `esports-broadcast-v1` | 电竞赛事转播 | 对比评测、排行榜、数据战报 |
-| `visual-novel-v1` | 视觉小说对话 | 故事、对话体、情感与人物 |
-| `neon-data-dark-v1` | 暗夜数据霓虹 | AI、前沿技术、数据与指标 |
-| `editorial-magazine-v1` | 杂志编辑排版 | 观点、人文、商业评论 |
-| `whiteboard-doodle-v1` | 白板手绘 | 教程、概念拆解、课堂讲解 |
-| `anime-cel-v1` | 日系动漫 | 番剧感科普、成长与挑战、轻快故事 |
-
-每套风格写入 `frame.md`、`docs/<风格名>-视频风格说明书.md` 与四张版式示例图，并把该风格用到的字体（均为 SIL OFL 1.1，许可证随附）拷进 `assets/fonts/`。
-
-#### 自定义风格
-
-不想套用内置风格时，用 `--style custom` 加一段文字描述：
-
-```bash
-am init my-video --canvas vertical-9x16 --style custom --style-brief "暖色胶片质感，低饱和，手写标注"
-# 描述较长时从文件读
-am init my-video --canvas vertical-9x16 --style custom --style-brief-file brief.txt
-```
-
-`am init` 只写入描述（`docs/style-brief.md`）和一份草稿 `frame.md`（`style_id: custom-draft`）。`am run` 在制作开始前执行「定风格」阶段，把描述落成 `frame.md`、`docs/自定义-视频风格说明书.md` 与四张示例图：
-
-- 字体只能从 `am style fonts` 列出的字体里选，用 `am style add-font <字体族>` 拷进项目；也可以自己放入带许可证的 woff2 文件。不能用本机系统字体，渲染机上没有。
-- 编排工具提供内置生图能力时（例如用 ChatGPT 账号登录的官方 Codex 带的 `$imagegen`），会先按描述生成一到两张氛围参照图，记在 `frame.md` 的 `mood_refs` 里。参照图只用来提炼质感与装饰语言，配色、字体、版式仍以 `frame.md` 的数值为准。用 API key 登录或接第三方 provider 时这个工具可能不可用，此时跳过这一步，直接画示例 SVG。
-- 示例图由编排工具画成 SVG，再用 `am validate style --regenerate-examples` 渲染成 PNG（需要 `rsvg-convert`、`magick` 和 `fonttools`）。
-
-定稿并通过 `am validate style` 之前，`am scene run` 会拒绝渲染，避免所有镜头按草稿里的占位 token 渲染完才发现风格不对。`am validate style` 只能检查结构、字体和示例图尺寸，检查不了好不好看：定稿后先看一遍 `assets/style-guide/examples/contact-sheet.png`。
+`am init` 仍接受旧版 `--style` 参数以兼容已有脚本，但它不再构成视觉要求。
 
 `am init` 不覆盖内容不同的已有文件。默认联网安装固定版本 0.8.14 的 HyperFrames 官方技能到项目的 `.agents/skills/`，与随二进制下发的 `text-to-lottie`、`algorithmic-art` 同处一个目录；安装依赖 `git`，离线或 CI 环境可使用 `--skip-hyperframes`。
 

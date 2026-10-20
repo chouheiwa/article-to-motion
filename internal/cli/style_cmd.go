@@ -14,20 +14,19 @@ import (
 	"github.com/chouheiwa/articale-to-motion/internal/project"
 )
 
-// newStyleCommand 是自定义风格定稿时用到的工具命令。
+// newStyleCommand 保留旧版字体管理命令，供存量项目使用。
 //
-// 内置风格在 am init 时就带齐了字体；自定义风格要到定风格阶段才知道用哪些
-// 字体，所以需要一个按需从字体池拷字体的入口。字体只能来自字体池或用户自带
-// 文件：渲染机没有系统字体，临时下载的字体既不可复现，许可也说不清。
+// 字体只能来自字体池或用户自带文件：渲染机没有系统字体，临时下载的字体既不可复现，
+// 许可也说不清。
 func newStyleCommand(stdout io.Writer) *cobra.Command {
 	styleCmd := &cobra.Command{
 		Use:   "style",
-		Short: "自定义风格定稿用的字体工具",
-		Long: `自定义风格（am init --style custom）定稿时选字体用。
+		Short: "旧版项目的字体工具",
+		Long: `旧版项目或需要本地字体的镜头可以使用。
 
 fonts 列出可用字体：随每个项目下发的正文字体，以及字体池里可按需拷入的字体。
 add-font 把字体池里的字体连同许可证拷进项目的 assets/fonts/；拷入后还要在
-frame.md 与风格说明书的 typography.font_files 里声明，并写进字体栈。`,
+镜头代码通过相对路径引用；不要依赖系统字体。`,
 	}
 	styleCmd.AddCommand(&cobra.Command{
 		Use:   "fonts",
@@ -35,8 +34,8 @@ frame.md 与风格说明书的 typography.font_files 里声明，并写进字体
 		Short: "列出可用字体",
 		Long: `列出自定义风格可以使用的全部字体：族名、字重与项目内路径。
 
-第一组随每个项目下发，直接在 typography.font_files 里声明即可；第二组在字体池里，
-要先用 am style add-font 拷进项目。不在清单里的字体只能由用户自带 woff2 文件，
+第一组随每个项目下发；第二组在字体池里，要先用 am style add-font 拷进项目。
+不在清单里的字体只能由用户自带 woff2 文件，
 不得引用本机系统字体——渲染机上没有。`,
 		Example: `  am style fonts`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -84,7 +83,7 @@ frame.md 与风格说明书的 typography.font_files 里声明，并写进字体
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(stdout, "已拷入 %s（新增 %d，未变 %d）。在 typography.font_files 里逐条声明：\n", fonts[0].Family, result.Created, result.Unchanged)
+			fmt.Fprintf(stdout, "已拷入 %s（新增 %d，未变 %d）。请在镜头代码中用相对路径引用：\n", fonts[0].Family, result.Created, result.Unchanged)
 			for _, font := range fonts {
 				fmt.Fprintf(stdout, "  - {family: %q, weight: %d, file: %q}\n", font.Family, font.Weight, assets.FontsDir+font.File)
 			}

@@ -60,25 +60,13 @@ npx playwright install chromium
 AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm test
 ```
 
-### Visual style
+### Visual direction
 
-Style is orthogonal to canvas and is also chosen once at init: the canvas fixes the frame and safe areas, the style fixes palette, fonts, layout archetypes, motion grammar and forbidden patterns. Pass `--style`, or pick interactively in a terminal; non-interactive runs without `--style` get the default `clear-system-blueprint-v1`.
+The project no longer presets or locks a visual style. Canvas, frame rate, and deterministic rendering remain tool contracts; the model chooses palette, fonts, layout, materials, and motion from the project content and each scene. Different scenes may use different visual languages.
 
-```bash
-am init my-video --canvas vertical-9x16 --style pixel-arcade-v1
-```
+`frame.md`, `style_guide`, and the legacy built-in style packs remain only for compatibility with existing projects. They are not injected into new render prompts or used as a render prerequisite. Copy any reference images, fonts, or GSAP code into the scene that uses them.
 
-Built-in styles: `clear-system-blueprint-v1` (default, knowledge/tech explainers), `pixel-arcade-v1`, `scifi-hud-v1`, `cyberpunk-glitch-v1`, `candy-casual-v1`, `rebel-graphic-v1`, `fantasy-quest-v1`, `esports-broadcast-v1`, `visual-novel-v1` (game-inspired), plus `neon-data-dark-v1`, `editorial-magazine-v1`, `whiteboard-doodle-v1`, `anime-cel-v1` (bright TV-anime look). Each writes `frame.md`, a style guide under `docs/`, four layout example images, and copies the fonts it uses (all SIL OFL 1.1, licenses included) into `assets/fonts/`.
-
-#### Custom style
-
-To skip the built-in styles, pass `--style custom` with a written description (`--style-brief "..."` or `--style-brief-file <file>`). `am init` writes only the description (`docs/style-brief.md`) and a draft `frame.md` (`style_id: custom-draft`). Before production starts, `am run` turns the description into `frame.md`, `docs/自定义-视频风格说明书.md` and four example images:
-
-- Fonts must come from `am style fonts` (copy them in with `am style add-font <family>`) or be woff2 files you add yourself with a license. System fonts are not allowed; the render machine has none.
-- If the orchestrator has built-in image generation (for example `$imagegen` in the official Codex CLI signed in with a ChatGPT account), it first generates one or two mood images and lists them under `mood_refs` in `frame.md`. They only inform texture and decoration; palette, fonts and layout still come from the `frame.md` values. With API-key sign-in or third-party providers the tool may be unavailable, and this step is skipped.
-- Example images are drawn as SVG and rendered with `am validate style --regenerate-examples` (needs `rsvg-convert`, `magick` and `fonttools`).
-
-Until the style is finalized and passes `am validate style`, `am scene run` refuses to render. `am validate style` checks structure, fonts and example sizes, not taste: look at `assets/style-guide/examples/contact-sheet.png` after finalizing.
+The legacy `--style` flag is still accepted for old scripts, but it no longer imposes a visual requirement.
 
 `am init` refuses to overwrite existing files with different content. By default it installs the pinned HyperFrames 0.8.14 skills into the project's `.agents/skills/`, alongside the binary-delivered `text-to-lottie` and `algorithmic-art`; use `--skip-hyperframes` for offline or CI environments.
 

@@ -29,16 +29,38 @@ func TestResolveStyleRejectsUnknownIDAndListsChoices(t *testing.T) {
 	}
 }
 
-// --style 出现之前的脚本只传 --canvas，非交互时必须回落到默认风格而不是报错。
-func TestResolveStyleDefaultsWithoutTerminal(t *testing.T) {
+// 不传 --style 时保持完全自由，而不是偷偷套用一个内置风格包。
+func TestResolveStyleDefaultsWithoutStyle(t *testing.T) {
 	f, err := os.Open(os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
 	s, err := resolveStyle("", f, &bytes.Buffer{})
-	if err != nil || s.ID != preset.DefaultStyle().ID {
-		t.Fatalf("非交互应取默认风格，实际 %v, %v", s.ID, err)
+	if err != nil || s.ID != preset.CustomStyle.ID {
+		t.Fatalf("未指定风格应保持自由兼容身份，实际 %v, %v", s.ID, err)
+	}
+}
+
+func TestInitWithoutStyleUsesCustomDraftInsteadOfBuiltinPack(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "video")
+	var out bytes.Buffer
+	if code := Execute([]string{"init", target, "--canvas", "vertical-3x4", "--skip-hyperframes"}, &out, &out); code != 0 {
+		t.Fatalf("默认自由视觉初始化失败 exit=%d：%s", code, out.String())
+	}
+	frame, err := os.ReadFile(filepath.Join(target, "frame.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(frame), "style_id: "+preset.DraftStyleID) {
+		t.Fatalf("未传 --style 时应写入自定义草稿，frame.md=%s", frame)
+	}
+	brief, err := os.ReadFile(filepath.Join(target, filepath.FromSlash(preset.CustomStyleBriefPath)))
+	if err != nil || !strings.Contains(string(brief), preset.AutomaticStyleBrief) {
+		t.Fatalf("默认自由视觉说明未写入：%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, filepath.FromSlash(preset.DefaultStyle().GuideDoc()))); !os.IsNotExist(err) {
+		t.Fatalf("默认初始化不应加载内置风格说明书，stat err=%v", err)
 	}
 }
 
@@ -53,8 +75,8 @@ func TestInitEveryStyleAndCanvasPassesStyleValidation(t *testing.T) {
 				if code := Execute([]string{"init", target, "--canvas", canvas.ID, "--style", style.ID, "--skip-hyperframes"}, &out, &out); code != 0 {
 					t.Fatalf("init 失败 exit=%d：%s", code, out.String())
 				}
-				if !strings.Contains(out.String(), style.Name) {
-					t.Errorf("init 输出应点名风格 %s：%s", style.Name, out.String())
+				if strings.Contains(out.String(), "风格 "+style.Name) {
+					t.Errorf("init 不应把风格写入初始化结果：%s", out.String())
 				}
 				if _, err := os.Stat(filepath.Join(target, filepath.FromSlash(style.GuideDoc()))); err != nil {
 					t.Errorf("缺少风格说明书：%v", err)
@@ -83,11 +105,11 @@ func TestResolveStyleAcceptsCustomFlag(t *testing.T) {
 	}
 }
 
-func TestStylePickerOffersCustomLast(t *testing.T) {
+func TestStylePickerOffersCustomFirst(t *testing.T) {
 	picker := newStylePicker()
-	last := picker.choices[len(picker.choices)-1]
-	if last.ID != preset.CustomStyle.ID || len(picker.choices) != len(preset.AllStyles())+1 {
-		t.Fatalf("选择框末尾应是自定义风格，实际 %s（共 %d 项）", last.ID, len(picker.choices))
+	first := picker.choices[0]
+	if first.ID != preset.CustomStyle.ID || len(picker.choices) != len(preset.AllStyles())+1 {
+		t.Fatalf("选择框首项应是自定义风格，实际 %s（共 %d 项）", first.ID, len(picker.choices))
 	}
 }
 
@@ -112,7 +134,7 @@ func TestResolveStyleBrief(t *testing.T) {
 		{"自定义用参数", preset.CustomStyle, " 暖色胶片 ", "", "暖色胶片", ""},
 		{"自定义用文件", preset.CustomStyle, "", file, "复古胶片\n手写标注", ""},
 		{"两者都给", preset.CustomStyle, "暖色", file, "", "只能二选一"},
-		{"非交互缺描述", preset.CustomStyle, "", "", "", "--style-brief"},
+		{"缺少旧版描述", preset.CustomStyle, "", "", defaultStyleBrief, ""},
 		{"空白描述", preset.CustomStyle, "   ", "", "", "不能为空"},
 		{"文件不存在", preset.CustomStyle, "", file + ".missing", "", "读取"},
 	}
@@ -132,7 +154,7 @@ func TestResolveStyleBrief(t *testing.T) {
 	}
 }
 
-// init 自定义风格：写出描述与草稿，validate style 明确报「定风格未完成」。
+// 旧版 init 自定义风格：写出描述与草稿，兼容校验仍能识别草稿。
 func TestInitCustomStyleWritesBriefAndDraft(t *testing.T) {
 	for _, canvas := range preset.All() {
 		t.Run(canvas.ID, func(t *testing.T) {
@@ -146,8 +168,8 @@ func TestInitCustomStyleWritesBriefAndDraft(t *testing.T) {
 			if err != nil || !strings.Contains(string(brief), "暖色胶片、手写标注") {
 				t.Fatalf("描述未写入 %s：%v", styleBriefPath, err)
 			}
-			if !strings.Contains(out.String(), "定风格") {
-				t.Errorf("init 输出应提示下一步要定风格：%s", out.String())
+			if strings.Contains(out.String(), "定风格") {
+				t.Errorf("init 不应再把定风格作为渲染前置条件：%s", out.String())
 			}
 			for _, name := range []string{"frame.md", preset.CustomStyle.GuideDoc()} {
 				if _, err := os.Stat(filepath.Join(target, filepath.FromSlash(name))); err != nil {
@@ -163,10 +185,10 @@ func TestInitCustomStyleWritesBriefAndDraft(t *testing.T) {
 	}
 }
 
-func TestInitCustomStyleRequiresBriefWithoutTerminal(t *testing.T) {
+func TestInitCustomStyleDefaultsToModelDirectedBriefWithoutTerminal(t *testing.T) {
 	var out bytes.Buffer
 	code := Execute([]string{"init", filepath.Join(t.TempDir(), "video"), "--canvas", "vertical-3x4", "--style", "custom", "--skip-hyperframes"}, &out, &out)
-	if code == 0 || !strings.Contains(out.String(), "--style-brief") {
-		t.Fatalf("非交互缺描述应失败并点名参数，exit=%d：%s", code, out.String())
+	if code != 0 {
+		t.Fatalf("缺少旧版描述应使用兼容说明，exit=%d：%s", code, out.String())
 	}
 }

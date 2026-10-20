@@ -325,7 +325,9 @@ func (s *Server) createAPI(w http.ResponseWriter, r *http.Request) {
 		req.Canvas = preset.Default().ID
 	}
 	if req.Style == "" {
-		req.Style = preset.DefaultStyle().ID
+		// 工作台与 CLI 保持一致：内置风格是可选风格包，默认进入模型自主
+		// 定风格流程，避免新项目被清晰系统蓝图预先定向。
+		req.Style = preset.CustomStyle.ID
 	}
 	parent, err := filepath.Abs(req.Parent)
 	if err != nil {
@@ -360,10 +362,14 @@ func (s *Server) createAPI(w http.ResponseWriter, r *http.Request) {
 		s.error(w, http.StatusBadRequest, "invalid_canvas", err.Error())
 		return
 	}
-	styleMeta, ok := preset.StyleByID(req.Style)
-	if !ok {
-		s.error(w, http.StatusBadRequest, "invalid_style", "未知风格")
-		return
+	styleMeta := preset.CustomStyle
+	if req.Style != preset.CustomStyle.ID {
+		var ok bool
+		styleMeta, ok = preset.StyleByID(req.Style)
+		if !ok {
+			s.error(w, http.StatusBadRequest, "invalid_style", "未知风格")
+			return
+		}
 	}
 	styleFiles, err := assets.Style(req.Style, req.Canvas)
 	if err != nil {
@@ -374,6 +380,12 @@ func (s *Server) createAPI(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.error(w, http.StatusInternalServerError, "template_unavailable", err.Error())
 		return
+	}
+	if req.Style == preset.CustomStyle.ID {
+		extra[preset.CustomStyleBriefPath] = []byte("# 风格描述\n\n" +
+			"> 由工作台的自主定风格流程写入。制作开始前按这里的描述生成 frame.md、" +
+			"`" + preset.CustomStyle.GuideDoc() + "` 与四张示例图。\n\n" +
+			preset.AutomaticStyleBrief + "\n")
 	}
 	if _, err := project.InitializeWithFiles(target, extra, shared, presetFiles, styleFiles); err != nil {
 		s.error(w, http.StatusBadRequest, "project_create_failed", err.Error())

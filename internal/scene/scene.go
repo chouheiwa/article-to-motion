@@ -226,9 +226,6 @@ func Load(directory string) (Scene, error) {
 		if stat, err := os.Stat(style); err != nil || !stat.Mode().IsRegular() {
 			return Scene{}, fmt.Errorf("style_guide 指向的文件不存在：%s", result.StyleGuide)
 		}
-		if err := rejectDraftStyle(result.Directory, result.StyleGuide); err != nil {
-			return Scene{}, err
-		}
 	}
 	if result.Renderer != "" && !tools.ValidTools[result.Renderer] {
 		return Scene{}, fmt.Errorf("无效的 renderer：%s", result.Renderer)
@@ -363,12 +360,8 @@ func (c Canvas) Label() string {
 	return fmt.Sprintf("%dx%d、%dfps", c.WidthPx, c.HeightPx, c.FPS)
 }
 
-// defaultCanvas 是没有视觉规范时的画幅，与本项目引入画幅预设之前的行为一致。
+// defaultCanvas 是没有旧版 frame 元数据时的画幅，与本项目引入画幅预设之前的行为一致。
 var defaultCanvas = Canvas{WidthPx: 1080, HeightPx: 1440, FPS: 30}
-
-// draftStyleID 是自定义风格草稿的 style_id，与 preset.DraftStyleID 相同。
-// 本包刻意不依赖 internal/preset，只能抄一份，由测试钉住两边一致。
-const draftStyleID = "custom-draft"
 
 // styleTokens 是镜头层要从视觉规范里读的那几项。
 type styleTokens struct {
@@ -419,20 +412,6 @@ func readStyleFrontmatter(directory, styleGuide string, target any) error {
 		return fmt.Errorf("视觉规范 %s 的 frontmatter 解析失败：%w", styleGuide, err)
 	}
 	return nil
-}
-
-// rejectDraftStyle 拦下尚未定稿的自定义风格。
-//
-// 草稿 frame.md 字段齐全，却只是默认风格的占位 token：放行的话所有镜头会按
-// 占位风格并发渲染完，成片才发现风格全错。读不出 frontmatter 时不在这里报，
-// 交给 CanvasOf 给出更具体的错误。
-func rejectDraftStyle(directory, styleGuide string) error {
-	tokens, err := readStyleTokens(directory, styleGuide)
-	if err != nil || tokens.StyleID != draftStyleID {
-		return nil
-	}
-	return fmt.Errorf("视觉规范 %s 仍是自定义风格草稿（style_id: %s）：定风格阶段未完成，"+
-		"先在项目根完成定风格并通过 am validate style，再把 frame.md 复制进镜头目录", styleGuide, draftStyleID)
 }
 
 // CanvasOf 从镜头目录里的视觉规范文件读出画布规格。
@@ -611,31 +590,10 @@ func BuildPrompt(s Scene, resolvedSkills map[string]string) (string, error) {
 		return "", err
 	}
 	frames := int(math.Round(s.DurationSeconds * float64(canvas.FPS)))
-	style := ""
-	if s.StyleGuide != "" {
-		// 渲染机是干净的无头 Chrome：字体栈里任何没有 @font-face 的字体族都会静默回退，
-		// 本地看着正常、成片排版是错的。所以字体自带文件这条必须由执行契约保证。
-		style = "\n视觉规范（强制）：完整读取 " + s.StyleGuide + "，严格遵守画布、配色、字体和安全区。\n" +
-			"字体（强制）：只允许使用 " + s.StyleGuide + " 的 typography 字体栈中声明的字体族。" +
-			"正文与说明用 primary_stack，数字与标签用 mono_stack；声明了 display_stack 时，其中的展示字只用于标题与大字，不得用来排正文。" +
-			"其中 typography.font_files 列出的字体必须在 composition 里用 @font-face 指向本镜头目录内的对应文件，" +
-			"每个用到的字重各写一条，并使用 font-display: block（并行抽帧下 swap 会让部分帧抓到回退字体）。" +
-			"不得引用任何未随镜头目录一起提供的字体文件。\n" +
-			"版式参照：" + s.StyleGuide + " 的 scene_archetypes 里每种骨架都带 example_png 示例图。" +
-			"动手设计前先打开与本镜头最接近的一两张（路径相对镜头目录；缺失时跳过），" +
-			"参照其构图密度、层次和留白，不照抄其中的文字与数据。\n"
-		tokens, err := readStyleTokens(s.Directory, s.StyleGuide)
-		if err != nil {
-			return "", err
-		}
-		// 氛围参照图多半是生图工具画的：配色与字形都不受 frame.md 约束，
-		// 不把优先级说死，渲染器会照着图抄颜色和字体。
-		if len(tokens.MoodRefs) > 0 {
-			style += "氛围参照：" + s.StyleGuide + " 的 mood_refs 列出了氛围参照图（路径相对镜头目录；缺失时跳过）。" +
-				"只从中取质感、光影与装饰语言；配色、字体、版式与安全区一律以 " + s.StyleGuide + " 的数值为准，" +
-				"图里的文字与字形不得照搬。\n"
-		}
-	}
+	// 风格由渲染器根据本镜头文案自主决定。style_guide 仅作为旧项目的
+	// 技术画布来源读取，不再把配色、字体、版式、示例图或动效写成强制要求。
+	style := "\n视觉自由度（强制）：本镜头的配色、字体、版式、材质与动效由你根据文案和素材自主决定；\n" +
+		"不得把项目中的 frame.md、style_id、style_name、示例图或其他旧风格资料当作视觉命令。\n"
 	timing, err := timingSection(s)
 	if err != nil {
 		return "", err
@@ -697,12 +655,12 @@ const selfReviewSection = `
 - 代码写完先跑 check，修掉全部报错与对比度问题。
 - 用 snapshot --at 截取关键时刻的静帧：至少覆盖开头、每个主要阶段的稳定期中点和结尾，带 --describe false。
 - 逐张打开截图亲眼看，按下列清单找问题：
-  1. 文字溢出、被裁切、互相重叠，或越出视觉规范的安全区；
+  1. 文字溢出、被裁切、互相重叠，或越出画布安全区；
   2. 同一时刻主焦点是否唯一、一眼可辨；
   3. 字号在成片实际观看尺寸下是否可读（竖屏按手机屏幕、横屏按电脑屏幕判断），层级是否分明；
   4. 画面是否大面积空白（尤其下半部）或过度拥挤；
   5. 是否有背景、中景、前景的层次，还是只有文字压在纯色底上；
-  6. 与版式示例图相比，构图密度与风格是否一致。
+  6. 构图密度是否服务于当前文案，且没有大面积空白或拥挤。
 - 静帧看不出动作。每个关键入场、阶段切换和结尾收束，用 snapshot --at 连续截取该段的每一帧（第 n 帧的时间写成 n ÷ fps 保留 6 位小数，30fps 下第 15 帧是 0.500000；逐帧取，不要按固定步长累加；取 0.3–0.5 秒），按顺序看：
   7. 有没有一帧蹦出、跳变或闪烁；入场前是否有预备、到位后是否有回落与稳定；
   8. 是否全程同一速度、同一条缓动曲线；几个元素是否在同一帧、以同一幅度齐动（应当错开先后、主次分明）；

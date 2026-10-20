@@ -221,20 +221,17 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 ` + canvasOptions() + `
 非交互环境（CI、管道）必须显式传 --canvas，不会静默取默认值；不传且无法交互时报错退出。
 
-风格同样在初始化时一次性选定，与画幅正交：画幅决定画布与安全区，风格决定
-配色、字体、版式骨架、动效语法与禁用项。用 --style 指定，不传时在终端里交互
-选择；非交互环境不传则取默认风格 ` + preset.DefaultStyle().ID + `。改风格同样意味着重建项目。
-可选风格：
+视觉风格不属于初始化契约：画幅决定画布与安全区，配色、字体、版式、材质和动效
+由模型根据本片内容与各镜头文案自由决定。旧版风格参数仍接受，但只为兼容旧脚本，
+不会成为渲染提示词或渲染前置校验。
+旧版 --style 可选值（仅用于兼容旧脚本）：
 ` + styleOptions() + `
 
---style ` + preset.CustomStyleFlag + ` 不套用内置风格，改由 --style-brief 或 --style-brief-file 给出文字
-描述。init 只写入描述（` + styleBriefPath + `）与一份草稿 frame.md；am run 在制作开始前
-执行定风格阶段，把描述落成 frame.md、说明书与四张示例图。定稿并通过
-am validate style 之前，镜头不会开始渲染。
+frame.md 仅为旧项目保留，供画幅等技术信息读取；它不再规定镜头的视觉风格。
 
 写入内容：
   PROMPT.md、PROMPT-PRODUCTION.md、article-to-motion.conf、.env.example
-  frame.md、docs/ 风格说明书、assets/fonts/ 中文字体、assets/style-guide/ 示例
+  frame.md（画幅技术信息；旧版风格参数会带出兼容文件）、assets/fonts/ 中文字体、assets/style-guide/ 示例
   templates/project-rules.md（am run 据此派生 AGENTS.md / CLAUDE.md 等）
   .agents/skills/ 内置技能树（text-to-lottie、algorithmic-art），随二进制下发
 
@@ -269,11 +266,8 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
   # 非交互环境必须显式指定画幅
   am init my-video --canvas vertical-9x16
 
-  # 指定风格
-  am init my-video --canvas vertical-9x16 --style ` + preset.DefaultStyle().ID + `
-
-  # 不套用内置风格，按文字描述定制
-  am init my-video --canvas vertical-9x16 --style ` + preset.CustomStyleFlag + ` --style-brief "暖色胶片质感，手写标注，低饱和"
+  # 画幅之外不指定视觉风格，镜头由模型自由创作
+  am init my-video --canvas vertical-9x16
 
   # 离线或 CI：跳过联网安装 HyperFrames 技能
   am init my-video --canvas vertical-3x4 --skip-hyperframes
@@ -348,10 +342,8 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
 					return fmt.Errorf("项目文件已写入，但写出 %s 失败：%w", cast.RosterFile, err)
 				}
 			}
-			fmt.Fprintf(stdout, "项目已初始化：%s（画幅 %s，风格 %s，新增 %d，未变 %d）\n", target, chosen.Label, style.Name, result.Created, result.Unchanged)
-			if style.ID == preset.CustomStyle.ID {
-				fmt.Fprintf(stdout, "自定义风格尚未定稿：am run 会先执行定风格阶段，按 %s 生成风格；定稿前 am validate style 会报未完成，镜头也不会开始渲染\n", styleBriefPath)
-			}
+			fmt.Fprintf(stdout, "项目已初始化：%s（画幅 %s，新增 %d，未变 %d）\n", target, chosen.Label, result.Created, result.Unchanged)
+			// 风格文件只为旧项目和画幅读取保留，不再作为渲染前的定稿门禁。
 			if skipHyperframes {
 				fmt.Fprintln(stdout, "警告：已跳过 HyperFrames 技能安装")
 				return nil
@@ -380,9 +372,9 @@ PROMPT-CAST-ADDENDUM.md，具体规则见该文件。cast.yaml 刚建出时 pack
 	}
 	initCmd.Flags().BoolVar(&skipHyperframes, "skip-hyperframes", false, "跳过联网安装 HyperFrames 官方技能；不影响随二进制下发的内置技能树")
 	initCmd.Flags().StringVar(&canvasID, "canvas", "", "画幅预设："+strings.Join(preset.IDs(), " | ")+"；不传则在终端里交互选择")
-	initCmd.Flags().StringVar(&styleID, "style", "", "视觉风格："+strings.Join(append(preset.StyleIDs(), preset.CustomStyleFlag), " | ")+"；不传则在终端里交互选择，非交互环境取默认风格")
-	initCmd.Flags().StringVar(&styleBrief, "style-brief", "", "自定义风格的文字描述，只能与 --style "+preset.CustomStyleFlag+" 一起使用")
-	initCmd.Flags().StringVar(&styleBriefFile, "style-brief-file", "", "从文件读取自定义风格的描述，与 --style-brief 二选一")
+	initCmd.Flags().StringVar(&styleID, "style", "", "旧版视觉风格参数（仅兼容，不作为渲染要求）："+strings.Join(append(preset.StyleIDs(), preset.CustomStyleFlag), " | "))
+	initCmd.Flags().StringVar(&styleBrief, "style-brief", "", "旧版自定义风格描述（仅兼容），只能与 --style "+preset.CustomStyleFlag+" 一起使用")
+	initCmd.Flags().StringVar(&styleBriefFile, "style-brief-file", "", "从文件读取旧版自定义风格描述，与 --style-brief 二选一")
 	initCmd.Flags().StringVar(&narration, "narration", narrationSolo,
 		"叙事模式："+narrationSolo+"（单口播，默认） | "+narrationCast+"（多角色对话，额外写出 cast.yaml 与 cast/）")
 	initCmd.Flags().StringVar(&delivery, "delivery", "speech", "讲解形式：speech（默认）、song（单人整曲）或 beat（无配音卡点）")
@@ -500,7 +492,7 @@ text 不得含 [[USER_MESSAGE]] 或 <scene-text> 定界标记，含则失败。
 	var coverageTolerance float64
 	runAll := &cobra.Command{
 		Use: "run-all ROOT", Args: exactArgs(1, "ROOT"), Short: "并行执行多个镜头",
-		Long: `并发渲染 ROOT 下的所有镜头。镜头之间无创作依赖，跨镜头视觉一致性由 frame.md 保证。
+		Long: `并发渲染 ROOT 下的所有镜头。镜头之间无创作依赖，跨镜头关系由各镜头的交接状态和 prompt.md 保证。
 
 每个镜头开跑前先判定状态，判定结果直接决定要不要重渲染：
   已有合格产物   产物存在、通过校验，且输入指纹与产物的渲染记录一致 → 跳过
@@ -508,7 +500,7 @@ text 不得含 [[USER_MESSAGE]] 或 <scene-text> 定界标记，含则失败。
                 避免悄悄覆盖人工确认过的成片；报告里写明是哪几项输入变了
   其余           渲染
 
-输入指纹覆盖组好的渲染提示词、scene.json、prompt.md、字幕、视觉规范、角色包、
+输入指纹覆盖组好的渲染提示词、scene.json、prompt.md、字幕、角色包、
 渲染工具、技能内容与 am 版本，产物通过校验时记在镜头目录的 .am-render.json。
 没有渲染记录的老产物退回旧判定：scene.json 或 prompt.md 的修改时间晚于产物即 Stale。
 
@@ -842,7 +834,7 @@ PROMPT 省略时读项目根的 PROMPT.md——该入口假定项目里已有定
 	archiveCmd.Flags().BoolVar(&dryRun, "dry-run", false, "只打印计划，不移动任何文件、不改动工作区")
 	root.AddCommand(archiveCmd)
 
-	validateCmd := &cobra.Command{Use: "validate", Short: "校验发布配置与风格规范",
+	validateCmd := &cobra.Command{Use: "validate", Short: "校验发布配置",
 		Long: `只读校验，不修改任何项目文件（唯一例外是 style --regenerate-examples）。
 校验通过时打印一行结论并退出 0，失败时把具体不符项写到 stderr 并退出 1。`,
 	}
@@ -871,8 +863,8 @@ publish.md 必须以安全 YAML frontmatter 提供机器字段，并以固定 Ma
 		}}
 	publishCmd.Flags().StringVar(&projectRoot, "project-root", "", "项目根目录，缺省为当前目录")
 	validateCmd.AddCommand(publishCmd)
-	styleCmd := &cobra.Command{Use: "style", Args: noArgs, Short: "校验风格规范",
-		Long: `校验项目的视觉规范：画布规格、配色、字体层级、安全区，以及字体文件是否齐备。
+	styleCmd := &cobra.Command{Use: "style", Args: noArgs, Short: "校验旧版风格文件（兼容命令）",
+		Long: `校验旧项目留下的风格文件：画布规格、配色、字体层级、安全区，以及字体文件是否齐备。新项目的渲染不要求这些文件；画幅和确定性约束仍会在镜头校验中执行。
 
 字体检查是重点：渲染机是一台干净的无头 Chrome，不装任何系统字体。字体栈里没有
 @font-face 的字体族会静默回退——本地看着正常、成片排版却是错的。HyperFrames 会
@@ -906,7 +898,7 @@ SVG 转 PNG 这一步不能用 ImageMagick 代替：多数 ImageMagick 构建自
 			if err := validate.Style(rootDir); err != nil {
 				return err
 			}
-			fmt.Fprintln(stdout, "风格规范校验通过")
+			fmt.Fprintln(stdout, "旧版风格文件校验通过")
 			return nil
 		}}
 	styleCmd.Flags().StringVar(&projectRoot, "project-root", "", "项目根目录，缺省为当前目录")

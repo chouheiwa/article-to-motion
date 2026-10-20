@@ -5,11 +5,9 @@ import (
 	"regexp"
 )
 
-// Style 是与画幅正交的视觉风格。
+// Style 是旧版初始化资产的兼容元数据。
 //
-// 画幅决定画布尺寸与安全区，风格决定配色、字体、版式骨架、动效语法和禁用项。
-// 两者在 am init 时各选一次，由 go generate 组合成 frame.md：canvas 与
-// safe_area 两块来自画幅，其余 token 来自风格模板。
+// 新镜头不把它当作视觉约束；画幅、安全区和确定性渲染仍由工具单独保证。
 type Style struct {
 	// ID 同时是 frame.md 的 style_id，也是 assets/styles/ 与模板目录的目录名。
 	ID string
@@ -35,12 +33,13 @@ func (s Style) GuideDoc() string {
 	return "docs/" + s.Name + "-视频风格说明书.md"
 }
 
-// 顺序即 am init 选择框里的展示顺序，第一项是默认值。
+// 顺序是内置风格包的稳定展示顺序。am init 的选择框会把自定义风格放在这些
+// 风格包之前；不传 --style 时也不会调用这里的第一项。
 var builtinStyles = []Style{
 	{
 		ID:              "clear-system-blueprint-v1",
 		Name:            "清晰系统蓝图",
-		Label:           "清晰系统蓝图：知识、技术与产品机制讲解（默认）",
+		Label:           "清晰系统蓝图：知识、技术与产品机制讲解",
 		SheetBackground: "#D5DEEB",
 	},
 	{
@@ -162,14 +161,19 @@ func StyleByIDOrError(id string) (Style, error) {
 	return Style{}, fmt.Errorf("未知风格 %q，可选：%v", id, StyleIDs())
 }
 
-// CustomStyleFlag 是 am init --style 的保留取值：不选内置风格，改由用户描述生成。
+// CustomStyleFlag 是 am init --style 的保留取值：不选内置风格，改由用户描述或
+// 模型自主判断生成。
 const CustomStyleFlag = "custom"
 
-// DraftStyleID 是自定义风格草稿骨架的 style_id。
-//
-// 草稿骨架字段齐全、能被解析，但还没有按用户描述定稿：validate 见到它就报
-// 「定风格阶段未完成」，scene.Load 见到它就拒绝渲染。定稿时由编排阶段把
-// style_id 改成 custom-<名字>。
+// CustomStyleBriefPath 是旧版自定义风格描述的兼容路径。
+const CustomStyleBriefPath = "docs/style-brief.md"
+
+// AutomaticStyleBrief 是旧版初始化流程写入项目的兼容说明。
+// 新镜头不会把它当作视觉约束。
+const AutomaticStyleBrief = "不套用预设风格。请根据本片主题、受众和素材自主设计一套清晰、统一、可执行的视觉风格；先确定配色、字体、版式骨架、动效语法与禁用项，再按项目规范完成风格说明书和示例图。"
+
+// DraftStyleID 是旧版自定义风格草稿骨架的 style_id。
+// validate style 仍识别它以兼容存量项目，但 scene.Load 不再把它视为渲染门禁。
 const DraftStyleID = "custom-draft"
 
 // CustomStyle 是自定义风格草稿骨架在源树与生成器里的身份。
@@ -181,7 +185,7 @@ const DraftStyleID = "custom-draft"
 var CustomStyle = Style{
 	ID:              DraftStyleID,
 	Name:            "自定义",
-	Label:           "自定义：按文字描述生成风格（需在制作前完成定风格阶段）",
+	Label:           "自定义：旧版参数（不限制新镜头视觉）",
 	SheetBackground: "#F5F7FB",
 }
 

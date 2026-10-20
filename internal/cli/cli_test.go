@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/chouheiwa/articale-to-motion/internal/preset"
 )
 
 func TestHelpListsPublicCommands(t *testing.T) {
@@ -61,7 +63,7 @@ func initProject(t *testing.T) string {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "video")
 	var out bytes.Buffer
-	if code := Execute([]string{"init", root, "--canvas", "vertical-3x4", "--skip-hyperframes"}, &out, &out); code != 0 {
+	if code := Execute([]string{"init", root, "--canvas", "vertical-3x4", "--style", preset.DefaultStyle().ID, "--skip-hyperframes"}, &out, &out); code != 0 {
 		t.Fatalf("init code=%d output=%s", code, out.String())
 	}
 	return root
@@ -259,7 +261,7 @@ func TestInitRejectsUnknownCanvas(t *testing.T) {
 func TestInitWritesChosenCanvas(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "video")
 	var out bytes.Buffer
-	if code := Execute([]string{"init", target, "--canvas", "vertical-9x16", "--skip-hyperframes"}, &out, &out); code != 0 {
+	if code := Execute([]string{"init", target, "--canvas", "vertical-9x16", "--style", preset.DefaultStyle().ID, "--skip-hyperframes"}, &out, &out); code != 0 {
 		t.Fatalf("init code=%d output=%s", code, out.String())
 	}
 	body, err := os.ReadFile(filepath.Join(target, "frame.md"))

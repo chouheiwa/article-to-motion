@@ -12,17 +12,6 @@
 - 把解析后的渲染器记录在执行日志中。每个镜头用 `am scene run <镜头目录>` 调用，渲染器由 `am` 从配置解析；需要单独指定时写入该镜头 `scene.json` 的 `renderer` 字段。
 - 如果配置的渲染工具不可用，停止并明确报告缺失的 CLI；未经用户确认不得替换渲染器。
 
-## 定风格（仅自定义风格）
-
-根目录 `frame.md` 的 `style_id` 为 `custom-draft` 时，项目用的是按文字描述定制的风格，必须先完成定风格再拆分镜头；`style_id` 是其他值时跳过本节。风格未定稿时 `am scene run` 会直接拒绝渲染。
-
-1. 读 `docs/style-brief.md`，把描述落成配色、字体角色、四种镜头骨架的版式、动效语法与禁用项。
-2. 可选：编排工具提供内置生图能力（例如 Codex 的 `$imagegen`）时，按描述生成一到两张氛围参照图并移进 `assets/style-guide/mood/`；不提供就跳过，不得为此改用需要 API 密钥的方式。参照图只取质感与装饰语言。
-3. 用 `am style fonts` 查看可用字体，`am style add-font <字体族>` 拷进项目；不得引用本机系统字体或临时下载字体。
-4. 改写 `frame.md` 与 `docs/自定义-视频风格说明书.md`，两份 frontmatter 逐项相同：`style_id` 改为 `custom-<小写英文短名>`；`canvas`、`safe_area` 一个数字都不改；`scene_archetypes` 的四个 `id` 与顺序不变；有氛围参照图时用 `mood_refs` 列出路径。
-5. 按 `frame.md` 的画布尺寸为四种骨架各画一张 SVG，存为 `assets/style-guide/examples/<id>.svg`，只用本风格声明的颜色与字体族。
-6. 运行 `am validate style --regenerate-examples`，修正到输出「风格规范校验通过」，再看一遍 `assets/style-guide/examples/contact-sheet.png` 确认字体、配色与骨架差异。
-
 ## 镜头拆分
 
 根据 `transcription.srt` 做粗粒度分镜。一个镜头可以包含单条字幕，也可以合并连续多条字幕；合并依据是文案是否表达同一主题、同一因果关系或同一视觉概念。
@@ -35,12 +24,11 @@
 
 为每个镜头创建独立目录，建议使用 `scenes/scene-001`、`scenes/scene-002` 这样的命名。目录至少包含：
 
-- `scene.json`：执行契约。字段为 `id`、`duration_seconds`、`output`、`transcript`、`text`，可选 `style_guide` 和 `renderer`。未知字段会直接报错。
+- `scene.json`：执行契约。字段为 `id`、`duration_seconds`、`output`、`transcript`、`text`，可选 `renderer`。未知字段会直接报错。
 - `prompt.md`：本镜头的创意方向、视觉概念和表达重点。可以按镜头文案自由改写，交付规格、阶段消息等执行契约由 `am` 保证，不在本文件中。
 - `transcription.srt`：复制完整字幕文件，供渲染工具理解整体上下文。
-- `frame.md`：仓库根目录存在视觉规范文件时必须一并复制，并在 `scene.json` 的 `style_guide` 中声明。声明了但文件不存在会报错。
-- `assets/style-guide/`：视觉规范 `scene_archetypes` 的 `example_png` 示例图，以及声明了 `mood_refs` 时的氛围参照图，按相同相对路径复制进来。
-- `assets/fonts/`：把视觉规范 `typography.font_files` 声明的字体文件按相同相对路径复制进来。渲染机是一台干净的无头 Chrome，不装任何系统字体，中文字形只能由这些自带文件提供；字体栈里没有 `@font-face` 的字体族会静默回退，本地看着正常、成片排版却是错的。
+- `frame.md`：如果项目提供，仅作为画布、帧率和安全区等技术信息的来源，不作为创作风格命令。
+- 用户需要的图片、字体和脚本：由本镜头自行选择并复制到镜头目录，不能依赖镜头目录之外的路径。
 - 渲染器锁定文件：固定 HyperFrames 版本、禁止升级或改动已装技能、禁止读取 `.env`、禁止改动 `scene.json` 的执行契约。文件名取决于该镜头所用渲染工具会自动读取的项目级指令文件（例如 `claude` 读 `CLAUDE.md`），按所选工具各自的约定命名。
 
 全部技能都在项目根的 `.agents/skills/` 下，由 `am init` 一次装齐：HyperFrames 官方技能按固定版本安装，`text-to-lottie` 与 `algorithmic-art` 随 `am` 二进制下发。技能缺失时重跑 `am init` 补齐，不要自己跑 `npx hyperframes skills`——那会装到本机 HOME 而不是项目里，绕过版本固定。也不得从其他项目或本机目录复制。
@@ -51,7 +39,7 @@
 
 ## 调度和等待
 
-用 `am scene run-all scenes/ --srt transcription.srt --strict-coverage` 一次性调度全部镜头。并发数由配置 `SCENE_JOBS` 决定（默认 3），可用 `--jobs N` 覆盖。镜头之间没有创作依赖，可以乱序渲染；跨镜头视觉一致性由 `frame.md` 保证，与执行顺序无关。
+用 `am scene run-all scenes/ --srt transcription.srt --strict-coverage` 一次性调度全部镜头。并发数由配置 `SCENE_JOBS` 决定（默认 3），可用 `--jobs N` 覆盖。镜头之间没有创作依赖，可以乱序渲染；跨镜头关系由各镜头的交接状态和 `prompt.md` 保证，与执行顺序无关。
 
 `--srt` 加 `--strict-coverage` 会在开始渲染前核对镜头编号唯一性，以及镜头总时长是否等于字幕跨度（容差 0.1 秒）。务必带上：漏掉一镜或某镜时长写错，等全部渲染完拼接时才发现的话，每一镜都已经烧掉一次完整的渲染调用。
 
@@ -122,14 +110,14 @@
 
 拼完后用 `am validate video final.mp4 --silent --decode --check-frame-zero` 做一次机器验收，不通过就不要交付。
 
-再用 `am review final.mp4 --scenes scenes/ --silent --out production/review` 做整片复查：它精确统计总帧数并与各镜头帧数之和比对（漏拼、重拼、掉帧都会被拦下），检查每个镜头交界两侧的帧，并把每个镜头的首帧、中间帧、末帧拼成联系表，每个交界再出一张前后各 6 帧的条带 `seam-NN.png`。判断结果读 `production/review/review.json`；机器检查通过后逐页打开 `sheet-NN.png`，看相邻镜头的风格与密度是否一致、结尾是否停在合适的画面，再逐张看 `seam-NN.png` 确认每个交界的转场顺畅。有问题只重渲染相关镜头，重新拼接后再复查一次。
+再用 `am review final.mp4 --scenes scenes/ --silent --out production/review` 做整片复查：它精确统计总帧数并与各镜头帧数之和比对（漏拼、重拼、掉帧都会被拦下），检查每个镜头交界两侧的帧，并把每个镜头的首帧、中间帧、末帧拼成联系表，每个交界再出一张前后各 6 帧的条带 `seam-NN.png`。判断结果读 `production/review/review.json`；机器检查通过后逐页打开 `sheet-NN.png`，看相邻镜头的交接、可读性与密度是否合适、结尾是否停在合适的画面，再逐张看 `seam-NN.png` 确认每个交界的转场顺畅。有问题只重渲染相关镜头，重新拼接后再复查一次。
 
 最终交付：
 
 - 每个镜头目录中的渲染日志和镜头 mp4。
 - 拼接后的 `final.mp4`。
 - 根目录 `publish.md`，包含实际成片规格、最终 SHA-256、发布文案和未完成事项。
-- `covers/` 下按发布平台出的封面图：抖音横 4:3（宽 1440、高 1080）+ 竖 3:4（宽 1080、高 1440），小红书与视频号竖 3:4，B 站与知乎横 16:10（宽 1920、高 1200，标题与主体放进居中的宽 1600、高 1080 安全区）。用本片的视觉规范与画面主体分别构图（不得截帧或互相缩放），文件名 `covers/<平台>-<宽>x<高>.png`，源文件放 `covers/src/`，经 `hyperframes check` 后用 `snapshot` 出图，并登记进 `publish.md` 的 `cover.images`。
+- `covers/` 下按发布平台出的封面图：抖音横 4:3（宽 1440、高 1080）+ 竖 3:4（宽 1080、高 1440），小红书与视频号竖 3:4，B 站与知乎横 16:10（宽 1920、高 1200，标题与主体放进居中的宽 1600、高 1080 安全区）。根据本片内容与画面主体分别构图（不得截帧或互相缩放），文件名 `covers/<平台>-<宽>x<高>.png`，源文件放 `covers/src/`，经 `hyperframes check` 后用 `snapshot` 出图，并登记进 `publish.md` 的 `cover.images`。
 - 如有失败，提供失败镜头编号、失败阶段、关键日志和建议重试方式。
 
 ## 项目收尾与归档

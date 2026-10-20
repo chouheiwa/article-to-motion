@@ -302,9 +302,8 @@ func skillPromptSections(resolved map[string]string) string {
 // 把「好看」压成蓝图名与指标的版本，指标全绿、画面反而拥挤平庸。动效数量由
 // 文案决定，这里只要求每个动效说得出理由。
 //
-// 环境动效与静止停留必须与 frame.md 一致：motion.ambient_per_scene_max 是 1，
-// 风格说明书要求重要信息稳定停留、禁止持续漂浮。这里再强制「贯穿全镜的环境
-// 动效」「不得静止超过 1.5 秒」就是两份强制约束互相打架，渲染器只能择一违反。
+// 环境动效不设项目级风格配额；只要不影响阅读和确定性，就由镜头根据文案决定。
+// 语义元素仍应在到位后稳定停留，避免用装饰动效掩盖信息层级。
 func animationPrompt(skillsDir string) string {
 	reference := fmt.Sprintf(
 		"- 加载 %s 技能，实现前必须读取该技能目录下的 %s（原子动效 rule 索引）。\n"+
@@ -384,9 +383,8 @@ func hyperFramesCLIPrompt(skillsDir string) string {
 // 「generic, web-page-looking output」的首要读物——那正是本项目产出最常见的
 // 毛病。design-adherence.md 则是写完之后对照设计规范自查的清单，供画面自查用。
 //
-// 同时要收窄范围：该技能还覆盖选配色、选字体、design-picker、旁白与整片节拍
-// 规划。本项目的配色与字体由 frame.md 锁定，旁白和分镜由上层决定，渲染器照
-// 那些路由走会自己换色板、改字体、重排整片节奏，直接违反单镜头契约。
+// 同时要收窄范围：该技能还覆盖旁白与整片节拍规划。旁白和分镜由上层决定，
+// 渲染器只负责当前镜头，不替整片做计划。视觉方向则由当前镜头自主决定。
 func hyperFramesCreativePrompt(skillsDir string) string {
 	reference := fmt.Sprintf("- 设计本镜头版式前读 %s 技能的 references/house-style.md 与 references/video-composition.md，"+
 		"画面自查时对照 references/design-adherence.md。\n"+
@@ -398,8 +396,8 @@ func hyperFramesCreativePrompt(skillsDir string) string {
 			HyperFramesCreativeSkillName, filepath.Join(skillsDir, HyperFramesCreativeSkillName))
 	}
 	return "构图与版式参考：\n" + reference +
-		"- 只取其中构图、景深层次、画面密度与避免网页式空版面的部分。" +
-		"配色、字体与安全区以视觉规范为准，不另选色板或字体，不走 design-picker；" +
+		"- 这些文件只是可选的构图参考；只取你认为有助于当前镜头的内容，不把它们当作项目级视觉规范。" +
+		"配色、字体、版式与动效由当前镜头自主决定；安全区仍遵守画布的技术约束。" +
 		"旁白、分镜与整片节拍已由上层决定，不做整片规划。\n"
 }
 
@@ -496,7 +494,7 @@ func sceneKitPrompt(skillsDir string) string {
 	return "镜头工具库（强制）：\n" + reference +
 		"- 用到它时把技能目录里的 " + sceneKitLibraryFile + " 复制进本镜头目录，用相对路径引入；不得引用镜头目录之外的文件。\n" +
 		"- 先加载镜头目录里的 " + SceneDataFile + "（由上层在渲染前写好，不要自己写或改），再加载 " + sceneKitLibraryFile + "。\n" +
-		"- 画面内烧录的字幕一律用 SceneKit.captions，不得手写字幕代码：位置、字号、断行与样式都按视觉规范的字幕规范统一。\n" +
+		"- 画面内烧录的字幕一律用 SceneKit.captions，不得手写字幕代码；位置、字号、断行与样式由本镜头决定，但必须保持可读。\n" +
 		"- 版式按安全区取值用 SceneKit.safeRect，不要把安全区像素手抄进合成；短语时间窗用 SceneKit.phrase。\n"
 }
 
