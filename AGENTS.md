@@ -158,6 +158,8 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 
 `scene.Run` 在启动渲染器前写 `am-scene.js`（`window.AM_SCENE`）。它的字段名是 `scene-kit` 技能的契约：`scenedata.go` 与 `assets/shared/.agents/skills/scene-kit/scene-kit.js` 两边改一处就要改另一处，`internal/project/scenekit_test.go` 用真实扫描器把示例镜头跑一遍。没有 `timing` 块的老镜头照样写这份文件（`cues` / `phrases` 为空），提示词里不出现时间合同表。
 
+镜头交接（`timing.go` 的 `PlanHandoff` / `Handoff`）是分镜计划里唯一跨镜头的约定。渲染器互相看不到，交界能接上只靠两侧拿到**同一份**约定，所以它由 `am scene cues` 从计划抄进两侧的 `timing.enter` / `timing.exit`，不让编排工具在两份 `prompt.md` 里各写一遍。手法表 `HandoffDevices` 刻意只收「靠画面里的东西接过去」的写法，不收通用擦除——章节交界套固定转场正是要消除的生硬；「相邻章节交界不得同手法」也是同一个理由。`am review` 用 `mediaprobe.FrameDifference`（32×32 RGB 均值绝对差）比对声明过交接的交界，阈值取得宽，只拦「两张不同的画面」：物件挪几像素就报的话，这道门很快没人信。改手法表要同步改制作提示词第五阶段「镜头交接」的表格，`TestProductionPromptCarriesSceneHandoffs` 钉着。
+
 镜头复用按输入指纹判定（`scene.Fingerprint`，记录在镜头目录的 `.am-render.json`）。指纹只算**声明过的输入**，不扫整个镜头目录——渲染器自己会往目录里写合成代码，算进去的话渲染一结束指纹就变了。镜头新增一类输入文件时，要把它加进 `Fingerprint` 的文件清单，否则改了它也不会触发 Stale。指纹一致只表示「这份已验收产物出自当前输入」，不表示可复现；指纹不一致仍只标 Stale、要 `--force` 才覆盖，不要改成自动重渲染。
 
 每次渲染写 `render-<id>.attempt.json`，重渲染前 `scene.ArchiveAttempt` 先把上一次的产物、日志与尝试记录挪进 `attempts/`。调度层的重试与单镜头重跑走同一个归档函数，不要各写一份编号逻辑。token 用量按各工具流式事件尽力读取（`tools.AccumulateUsage`），读不到就留空，不做估算。

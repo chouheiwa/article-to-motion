@@ -215,3 +215,60 @@ func TestSceneCuesValidatesFlags(t *testing.T) {
 		t.Errorf("锚点超出总帧数应拒绝：%v", err)
 	}
 }
+
+func TestSceneCuesWritesLookAndHandoffsToBothSides(t *testing.T) {
+	root := cuesProject(t)
+	writePlan(t, root, `{"schema":1,"look":{"background":"#0F1720","ink":"#F5F1E8","accent":"#F2B134"},"scenes":[
+  {"id":"scene-001","dir":"scenes/scene-001","chapter":"问题"},
+  {"id":"scene-002","dir":"scenes/scene-002","first_subtitle":2,"chapter":"问题"},
+  {"id":"scene-003","dir":"scenes/scene-003","first_phrase":"p-4","cut":"prev_end","chapter":"机制",
+   "handoff":{"device":"push_in","bridge":"琥珀色圆形表面铺满画面"}}]}`)
+	if out, err := runCues(root); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	load := func(id string) scene.Scene {
+		s, err := scene.Load(filepath.Join(root, "scenes", id))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	first, second, third := load("scene-001"), load("scene-002"), load("scene-003")
+	if first.Timing.Look.Background != "#0F1720" || third.Timing.Look != first.Timing.Look {
+		t.Errorf("每个镜头都应带同一份全片配色：%+v %+v", first.Timing.Look, third.Timing.Look)
+	}
+	if first.Timing.Exit != (scene.Handoff{}) || second.Timing.Enter != (scene.Handoff{}) {
+		t.Errorf("没写 handoff 的章节内交界是硬切：%+v %+v", first.Timing.Exit, second.Timing.Enter)
+	}
+	want := scene.Handoff{Device: "push_in", Bridge: "琥珀色圆形表面铺满画面", CrossChapter: true}
+	exit, enter := second.Timing.Exit, third.Timing.Enter
+	if exit.Peer != "scene-003" || enter.Peer != "scene-002" {
+		t.Errorf("交接两侧的 peer 不对：%+v %+v", exit, enter)
+	}
+	exit.Peer, enter.Peer = "", ""
+	if exit != want || enter != want {
+		t.Errorf("交界两侧应拿到同一份约定：%+v %+v", exit, enter)
+	}
+	if third.Timing.Chapter != "机制" {
+		t.Errorf("章节应写进 timing：%q", third.Timing.Chapter)
+	}
+	if out, err := runCues(root, "--check"); err != nil {
+		t.Fatalf("--check 应通过：%v\n%s", err, out)
+	}
+
+	// 改了交接约定却没重跑，--check 要指出来。
+	writePlan(t, root, strings.Replace(mustRead(t, filepath.Join(root, "production", "scene-plan.json")), "push_in", "flood", 1))
+	out, err := runCues(root, "--check")
+	if err == nil || !strings.Contains(err.Error(), "enter=scene-002/flood") {
+		t.Fatalf("交接改动应被 --check 发现：%v\n%s", err, out)
+	}
+}
+
+func mustRead(t *testing.T, path string) string {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}

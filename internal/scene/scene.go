@@ -594,6 +594,11 @@ func BuildPrompt(s Scene, resolvedSkills map[string]string) (string, error) {
 	// 技术画布来源读取，不再把配色、字体、版式、示例图或动效写成强制要求。
 	style := "\n视觉自由度（强制）：本镜头的配色、字体、版式、材质与动效由你根据文案和素材自主决定；\n" +
 		"不得把项目中的 frame.md、style_id、style_name、示例图或其他旧风格资料当作视觉命令。\n"
+	if s.Timing != nil && s.Timing.Look != (Look{}) {
+		// 配色由分镜计划统一，只放开其余维度；配色本身在时间合同后的「全片配色」段。
+		style = "\n视觉自由度（强制）：本镜头的字体、版式、材质与动效由你根据文案和素材自主决定，配色遵守下面的「全片配色」；\n" +
+			"不得把项目中的 frame.md、style_id、style_name、示例图或其他旧风格资料当作视觉命令。\n"
+	}
 	timing, err := timingSection(s)
 	if err != nil {
 		return "", err

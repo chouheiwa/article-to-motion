@@ -41,6 +41,8 @@ type SceneData struct {
 	Subtitles       any            `json:"subtitles"`
 	Cues            []LocalCue     `json:"cues"`
 	Phrases         []LocalPhrase  `json:"phrases"`
+	// Look 是全片配色，分镜计划没写 look 时省略。
+	Look *Look `json:"look,omitempty"`
 }
 
 // LocalCue 是落在本镜头内的一条字幕，已裁到 [0, frames)。
@@ -97,6 +99,10 @@ func BuildSceneData(s Scene) (SceneData, error) {
 	}
 	start := t.StartFrame
 	data.StartFrame = &start
+	if t.Look != (Look{}) {
+		look := t.Look
+		data.Look = &look
+	}
 	transcript, err := contained(s.Directory, s.Transcript, "transcript")
 	if err != nil {
 		return SceneData{}, err
@@ -234,5 +240,89 @@ func timingSection(s Scene) (string, error) {
 	fmt.Fprintf(&b, "- 本镜头目录里的 %s 以 window.AM_SCENE 提供同一份数据（帧率、帧数、画布、安全区、字幕样式、字幕与短语的局部帧）。"+
 		"在 composition 里用 <script src=\"%s\"></script> 加载，帧号从中读取，不要把帧号写死在代码里；该文件由 am 生成，不要修改。\n",
 		SceneDataFile, SceneDataFile)
+	b.WriteString(lookSection(t.Look))
+	b.WriteString(handoffSection(t, data))
 	return b.String(), nil
+}
+
+// lookSection 是全片配色段。没有 look 时为空，镜头照旧自主选色。
+func lookSection(look Look) string {
+	if look == (Look{}) {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n全片配色（强制，全片共用，window.AM_SCENE.look 是同一份）：\n")
+	fmt.Fprintf(&b, "- 底色 %s：画面大面积背景只用它；正文与主要文字 %s；强调 %s", look.Background, look.Ink, look.Accent)
+	if look.Accent2 != "" {
+		fmt.Fprintf(&b, "，第二强调 %s", look.Accent2)
+	}
+	if look.Surface != "" {
+		fmt.Fprintf(&b, "；卡片、面板等承载面 %s", look.Surface)
+	}
+	b.WriteString("。\n- 允许在这几种颜色之间调透明度、明暗做层次，不得另起一套主色或换底色；跨章节时观众靠底色与配色认出这还是同一条视频。\n")
+	return b.String()
+}
+
+// handoffMinTail 是交接动作至少要有的帧数（30fps 下约 0.3 秒），少于它时
+// 提示词改为允许与字幕重叠。
+const handoffMinTail = 9
+
+// handoffSection 是镜头交接段。相邻两个镜头分别渲染、互相看不到，
+// 交界能否接上只取决于两侧是否照同一份约定画出同一帧，所以这里把约定原样给两边，
+// 再把交接动作可用的空档帧算好，不让渲染器拿可读区间去做转场。
+func handoffSection(t *Timing, data SceneData) string {
+	if t.Enter == (Handoff{}) && t.Exit == (Handoff{}) {
+		return ""
+	}
+	head, tail := data.Frames, data.Frames
+	if len(data.Cues) > 0 {
+		head, tail = data.Frames, 0
+		for _, c := range data.Cues {
+			head = min(head, c.StartFrame)
+			tail = max(tail, c.EndFrameExclusive)
+		}
+		tail = data.Frames - tail
+	}
+	var b strings.Builder
+	b.WriteString("\n镜头交接（强制，由分镜计划约定；相邻镜头分别渲染、互相看不到，两侧拿到的是同一份约定）：\n")
+	side := func(label string, h Handoff, peerRole string) {
+		scope := "章节内"
+		if h.CrossChapter {
+			scope = "章节交界"
+		}
+		fmt.Fprintf(&b, "- %s：%s %s（%s），手法 %s——%s。\n", label, peerRole, h.Peer, scope, h.Device, HandoffGuide(h.Device))
+		fmt.Fprintf(&b, "  交界帧：%s\n", bridgeText(h.Bridge))
+	}
+	if t.Enter != (Handoff{}) {
+		side("入场", t.Enter, "承接")
+		fmt.Fprintf(&b, "  本镜头第 0 帧必须就是这一帧，从它接着上一镜头的动作继续，不得重新从静止起势或另起一个开场画面。")
+		if len(data.Cues) == 0 {
+			b.WriteString("本镜头没有字幕，接续动作的长短按画面需要决定。\n")
+		} else if head >= handoffMinTail {
+			fmt.Fprintf(&b, "接续动作放在第一条字幕出现之前（局部第 0 帧到第 %d 帧，共 %d 帧）。\n", head, head)
+		} else {
+			fmt.Fprintf(&b, "第一条字幕前只有 %d 帧，接续动作可以与开头字幕重叠，但不得遮挡字幕，可读元素照常不早于对应字幕或短语出现。\n", head)
+		}
+	}
+	if t.Exit != (Handoff{}) {
+		side("出场", t.Exit, "交给")
+		fmt.Fprintf(&b, "  本镜头最后一帧（局部第 %d 帧）必须就是这一帧；这条覆盖「镜头结尾停在可读的终态」——有出场交接的镜头结尾停在交界帧。", data.Frames-1)
+		if len(data.Cues) == 0 {
+			b.WriteString("本镜头没有字幕，出场动作的长短按画面需要决定。\n")
+		} else if tail >= handoffMinTail {
+			fmt.Fprintf(&b, "出场动作放在最后一条字幕结束之后（局部第 %d 帧到第 %d 帧，共 %d 帧），之前所有可读元素保持可读。\n", data.Frames-tail, data.Frames-1, tail)
+		} else {
+			fmt.Fprintf(&b, "最后一条字幕之后只有 %d 帧，出场动作可以与结尾字幕重叠，但可读元素在最少可读帧数内不得被遮挡或移出。\n", tail)
+		}
+	}
+	b.WriteString("- 运动跨过交界要连续：出场动作以加速（ease-in）进入交界帧，入场动作从交界帧以减速（ease-out）离开，两侧方向、速度一致；不得在交界帧两侧各停一次，那会让观众看到一次顿挫。\n")
+	b.WriteString("- 交界帧以外的构图、版式和动效仍由你决定。整片复查会逐帧比对交界前后两帧，画面差异过大判为不合格、需要重渲染。\n")
+	return b.String()
+}
+
+// bridgeText 清理计划里写的交界帧描述：它来自分镜计划，同样不能伪装成阶段消息或定界块。
+func bridgeText(text string) string {
+	text = strings.ReplaceAll(text, "[[USER_MESSAGE]]", "")
+	text = delimiterMatch.ReplaceAllString(text, "")
+	return strings.Join(strings.Fields(text), " ")
 }

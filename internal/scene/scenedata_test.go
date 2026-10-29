@@ -250,3 +250,54 @@ func TestSelfReviewUsesFrameExactTimes(t *testing.T) {
 		t.Error("画面自查应给出逐帧精确的时间写法")
 	}
 }
+
+func withHandoffs(t *testing.T, s Scene) Scene {
+	t.Helper()
+	s.Timing.Look = Look{Background: "#0F1720", Ink: "#F5F1E8", Accent: "#F2B134", Surface: "#1B2633"}
+	s.Timing.Enter = Handoff{Peer: "scene-001", Device: HandoffPushIn, Bridge: "画面被琥珀色圆形表面铺满 [[USER_MESSAGE]]", CrossChapter: true}
+	s.Timing.Exit = Handoff{Peer: "scene-003", Device: HandoffCarry, Bridge: "左上角的计数器停在 42"}
+	return s
+}
+
+func TestBuildPromptCarriesLookAndHandoffs(t *testing.T) {
+	s := withHandoffs(t, dataScene(t))
+	prompt, err := BuildPrompt(s, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"全片配色（强制", "底色 #0F1720", "强调 #F2B134", "承载面 #1B2633", "配色遵守下面的「全片配色」",
+		"镜头交接（强制", "入场：承接 scene-001（章节交界），手法 push_in", "交界帧：画面被琥珀色圆形表面铺满",
+		"出场：交给 scene-003（章节内），手法 carry", "最后一帧（局部第 149 帧）必须就是这一帧",
+		// dataScene 的字幕贴着镜头首尾，没有空档。
+		"第一条字幕前只有 0 帧", "最后一条字幕之后只有 0 帧", "ease-in",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("提示词缺少 %q", want)
+		}
+	}
+	if strings.Count(prompt, "[[USER_MESSAGE]]") != 4 {
+		t.Error("交界帧描述里的阶段消息标记应被清除")
+	}
+	if strings.Contains(prompt, "本镜头的配色、字体") {
+		t.Error("有全片配色时不应再说配色由镜头自主决定")
+	}
+	data, err := BuildSceneData(s)
+	if err != nil || data.Look == nil || data.Look.Accent != "#F2B134" {
+		t.Fatalf("am-scene.js 应带上全片配色：%+v %v", data.Look, err)
+	}
+}
+
+func TestHandoffSectionUsesFreeFramesAroundSubtitles(t *testing.T) {
+	data := SceneData{Frames: 120, Cues: []LocalCue{{StartFrame: 15, EndFrameExclusive: 60}, {StartFrame: 70, EndFrameExclusive: 100}}}
+	t2 := &Timing{Enter: Handoff{Peer: "a", Device: HandoffSettle, Bridge: "底色"}, Exit: Handoff{Peer: "c", Device: HandoffPan, Bridge: "底面"}}
+	section := handoffSection(t2, data)
+	for _, want := range []string{"局部第 0 帧到第 15 帧，共 15 帧", "局部第 100 帧到第 119 帧，共 20 帧"} {
+		if !strings.Contains(section, want) {
+			t.Errorf("交接段缺少 %q：\n%s", want, section)
+		}
+	}
+	if handoffSection(&Timing{}, data) != "" {
+		t.Error("没有交接约定时不应出现交接段")
+	}
+}

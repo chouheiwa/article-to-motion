@@ -23,7 +23,7 @@ cp <本技能目录>/scene-kit.js ./scene-kit.js
 
 ### 2. 先加载 am-scene.js，再加载 scene-kit.js
 
-`am-scene.js` 由 `am` 在渲染前写进镜头目录，定义 `window.AM_SCENE`：画布尺寸、帧率、总帧数、frame.md 的安全区与字幕规范、本镜头的字幕时间轴（`cues`）与短语时间窗（`phrases`）。**不要自己写或改这个文件**，它每次渲染前都会被重新生成。
+`am-scene.js` 由 `am` 在渲染前写进镜头目录，定义 `window.AM_SCENE`：画布尺寸、帧率、总帧数、frame.md 的安全区与字幕规范、本镜头的字幕时间轴（`cues`）与短语时间窗（`phrases`）。分镜计划定了全片配色时还有 `look`（`background`、`ink`、`accent`，以及可选的 `surface`、`accent_2`，均为 `#RRGGBB`），颜色从这里读，不要在代码里另写一份；没定时这个键不存在。**不要自己写或改这个文件**，它每次渲染前都会被重新生成。
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>

@@ -694,3 +694,40 @@ func TestReportWriteJSONIsMachineReadable(t *testing.T) {
 		}
 	}
 }
+
+func TestFrameDifferenceSeparatesSameAndDifferentPictures(t *testing.T) {
+	tc := toolchain(t)
+	// 前 1 秒是一张画面，后 1 秒换成另一张：同一段内两帧应几乎相同，跨段应差很多。
+	path := filepath.Join(t.TempDir(), "seam.mp4")
+	cmd := exec.Command(ffmpegFor(t), "-v", "error", "-y",
+		"-f", "lavfi", "-i", "color=c=#102030:size=320x240:rate=30:duration=1",
+		"-f", "lavfi", "-i", "color=c=#f0e0c0:size=320x240:rate=30:duration=1",
+		"-filter_complex", "[0:v]drawbox=x=100:y=80:w=120:h=80:color=#f2b134:t=fill[a];[a][1:v]concat=n=2:v=1[out]",
+		"-map", "[out]", "-c:v", "libx264", "-pix_fmt", "yuv420p", path)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("生成交界素材失败：%v\n%s", err, output)
+	}
+	same, err := tc.FrameDifference(path, 0.5, 0.5+1.0/30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if same >= 5 {
+		t.Errorf("同一画面相邻两帧差异应接近 0，实际 %.2f", same)
+	}
+	different, err := tc.FrameDifference(path, 29.0/30, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if different < 48 {
+		t.Errorf("两张无关画面差异应高于不合格阈值 48，实际 %.2f", different)
+	}
+}
+
+func TestMeanAbsoluteDifferenceRejectsMismatchedFrames(t *testing.T) {
+	if _, err := MeanAbsoluteDifference([]byte{1, 2}, []byte{1}); err == nil {
+		t.Fatal("长度不同的两帧应报错")
+	}
+	if got, err := MeanAbsoluteDifference([]byte{0, 10}, []byte{4, 0}); err != nil || got != 7 {
+		t.Fatalf("均值应为 7，收到 %v %v", got, err)
+	}
+}

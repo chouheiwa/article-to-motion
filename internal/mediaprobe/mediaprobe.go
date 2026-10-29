@@ -534,18 +534,9 @@ func (t Toolchain) FrameStats(path string, atSeconds float64) (FrameStats, error
 	if err != nil {
 		return FrameStats{}, err
 	}
-	// 输入端定位，理由同 ContactSheet：整片复查要对每个镜头交界各取两帧。
-	cmd := exec.Command(ffmpeg, "-v", "error", "-ss", formatSeconds(atSeconds), "-i", path,
-		"-frames:v", "1",
-		"-vf", fmt.Sprintf("scale=%d:%d,format=gray", statsSampleSize, statsSampleSize),
-		"-f", "rawvideo", "-")
-	cmd.Env = t.env
-	output, err := cmd.Output()
+	output, err := t.rawFrame(ffmpeg, path, atSeconds, statsSampleSize, "gray")
 	if err != nil {
-		return FrameStats{}, fmt.Errorf("读取帧统计失败：%s @ %.3f 秒（%s）", path, atSeconds, commandError(err))
-	}
-	if len(output) == 0 {
-		return FrameStats{}, fmt.Errorf("该时间点没有帧：%s @ %.3f 秒", path, atSeconds)
+		return FrameStats{}, err
 	}
 	var sum float64
 	for _, pixel := range output {
@@ -559,6 +550,59 @@ func (t Toolchain) FrameStats(path string, atSeconds float64) (FrameStats, error
 	}
 	variance /= float64(len(output))
 	return FrameStats{AtSeconds: atSeconds, Mean: mean, StdDev: math.Sqrt(variance)}, nil
+}
+
+// rawFrame 抽取 atSeconds 处的一帧，缩放成 size×size 的指定像素格式后返回裸像素。
+func (t Toolchain) rawFrame(ffmpeg, path string, atSeconds float64, size int, pixelFormat string) ([]byte, error) {
+	// 输入端定位，理由同 ContactSheet：整片复查要对每个镜头交界各取两帧。
+	cmd := exec.Command(ffmpeg, "-v", "error", "-ss", formatSeconds(atSeconds), "-i", path,
+		"-frames:v", "1",
+		"-vf", fmt.Sprintf("scale=%d:%d,format=%s", size, size, pixelFormat),
+		"-f", "rawvideo", "-")
+	cmd.Env = t.env
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("读取帧像素失败：%s @ %.3f 秒（%s）", path, atSeconds, commandError(err))
+	}
+	if len(output) == 0 {
+		return nil, fmt.Errorf("该时间点没有帧：%s @ %.3f 秒", path, atSeconds)
+	}
+	return output, nil
+}
+
+// differenceSampleSize 是比对两帧时的缩放边长。取得很小是刻意的：交接时物件
+// 在交界两侧挪动几像素、描边粗细差一点都属于接上了，缩到 32 像素后这类差异
+// 几乎消失，剩下的只有「两张不同的画面」这种量级的差别。
+const differenceSampleSize = 32
+
+// FrameDifference 抽取 a、b 两个时间点的帧，缩放成 32×32 的 RGB 小图，返回逐通道
+// 绝对差的均值（0–255）。0 是完全相同，两张无关画面通常在 40 以上。
+func (t Toolchain) FrameDifference(path string, a, b float64) (float64, error) {
+	ffmpeg, err := t.ffmpegPath()
+	if err != nil {
+		return 0, err
+	}
+	first, err := t.rawFrame(ffmpeg, path, a, differenceSampleSize, "rgb24")
+	if err != nil {
+		return 0, err
+	}
+	second, err := t.rawFrame(ffmpeg, path, b, differenceSampleSize, "rgb24")
+	if err != nil {
+		return 0, err
+	}
+	return MeanAbsoluteDifference(first, second)
+}
+
+// MeanAbsoluteDifference 是两段等长裸像素逐字节绝对差的均值。
+func MeanAbsoluteDifference(first, second []byte) (float64, error) {
+	if len(first) != len(second) || len(first) == 0 {
+		return 0, fmt.Errorf("两帧像素长度不同（%d 与 %d），无法比对", len(first), len(second))
+	}
+	var sum float64
+	for i := range first {
+		sum += math.Abs(float64(first[i]) - float64(second[i]))
+	}
+	return sum / float64(len(first)), nil
 }
 
 func formatSeconds(value float64) string {

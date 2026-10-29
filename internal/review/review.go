@@ -21,6 +21,7 @@ type Prober interface {
 	Probe(path string) (mediaprobe.Media, error)
 	CountFrames(path string) (int, error)
 	FrameStats(path string, atSeconds float64) (mediaprobe.FrameStats, error)
+	FrameDifference(path string, a, b float64) (float64, error)
 	ContactSheet(path string, atSeconds []float64, columns, thumbWidth int, dest string) error
 	MeasureProgramLoudness(path string) (mediaprobe.ProgramLoudness, error)
 }
@@ -36,11 +37,27 @@ type LoudnessTarget struct {
 // 一次转场的收尾与起势。只看切点两侧各一帧，判断不了转场是否顺。
 const SeamFrames = 6
 
-// Segment 是成片里按顺序首尾相接的一个镜头。
+// Segment 是成片里按顺序首尾相接的一个镜头。Handoff 是从上一镜头进入本镜头
+// 时约定的交接手法，空串表示没有约定（硬切）；CrossChapter 标记章节交界。
 type Segment struct {
-	ID     string
-	Frames int
+	ID           string
+	Frames       int
+	Handoff      string
+	CrossChapter bool
 }
+
+// 交界帧差异的判定阈值（MeanAbsoluteDifference，0–255）。
+//
+// 只对声明了交接的交界判：两侧按约定都画同一帧，前一镜末帧与后一镜首帧应当
+// 几乎相同。没有约定的交界是有意的硬切，差异再大也不说明什么。
+// 阈值取得宽：交接物件挪了几像素、底纹淡了一点都不该拦，拦下的只该是「两张
+// 不同的画面」——误判几次，这道门就没人信了。
+const (
+	// handoffBreakDifference 及以上判为没接上，进 Problems。
+	handoffBreakDifference = 48.0
+	// handoffLooseDifference 及以上进 Hints，让看图的一方确认。
+	handoffLooseDifference = 20.0
+)
 
 // Options 控制一次复查。Segments 为空时只做与镜头无关的检查，联系表按固定间隔取帧。
 type Options struct {
@@ -83,6 +100,9 @@ type Cut struct {
 	Frame  int                   `json:"frame"`
 	Before mediaprobe.FrameStats `json:"before"`
 	After  mediaprobe.FrameStats `json:"after"`
+	// Handoff 与 Difference 只在该交界声明了交接时出现。
+	Handoff    string   `json:"handoff,omitempty"`
+	Difference *float64 `json:"difference,omitempty"`
 }
 
 // Report 是复查的机器可读结果。OK 只由 Problems 决定。
@@ -299,7 +319,16 @@ func checkCuts(p Prober, report *Report, opts Options) error {
 		if err != nil {
 			return err
 		}
-		cut := Cut{From: opts.Segments[i].ID, To: opts.Segments[i+1].ID, Frame: cursor, Before: before, After: after}
+		next := opts.Segments[i+1]
+		cut := Cut{From: opts.Segments[i].ID, To: next.ID, Frame: cursor, Before: before, After: after, Handoff: next.Handoff}
+		if next.Handoff != "" {
+			difference, err := p.FrameDifference(opts.Video, frameTime(cursor-1, opts.FPS), frameTime(cursor, opts.FPS))
+			if err != nil {
+				return err
+			}
+			cut.Difference = &difference
+			checkHandoff(report, cut, next.CrossChapter)
+		}
 		report.Cuts = append(report.Cuts, cut)
 		if before.Blank() || after.Blank() {
 			report.Hints = append(report.Hints, fmt.Sprintf(
@@ -307,6 +336,24 @@ func checkCuts(p Prober, report *Report, opts Options) error {
 		}
 	}
 	return nil
+}
+
+// checkHandoff 按交界帧差异判定声明过交接的交界是否真的接上了。
+func checkHandoff(report *Report, cut Cut, crossChapter bool) {
+	scope := "交界"
+	if crossChapter {
+		scope = "章节交界"
+	}
+	switch difference := *cut.Difference; {
+	case difference >= handoffBreakDifference:
+		report.Problems = append(report.Problems, fmt.Sprintf(
+			"%s → %s %s（第 %d 帧）约定了 %s 交接，但前一镜末帧与后一镜首帧差异 %.1f，是两张不同的画面：对照两侧 timing.exit / timing.enter 的交界帧重渲染没接上的一侧",
+			cut.From, cut.To, scope, cut.Frame, cut.Handoff, difference))
+	case difference >= handoffLooseDifference:
+		report.Hints = append(report.Hints, fmt.Sprintf(
+			"%s → %s %s（第 %d 帧）约定了 %s 交接，交界两帧差异 %.1f，看对应的 seam 条带确认物件、位置和底色接上了",
+			cut.From, cut.To, scope, cut.Frame, cut.Handoff, difference))
+	}
 }
 
 func frameTime(frame, fps int) float64 { return float64(frame) / float64(fps) }

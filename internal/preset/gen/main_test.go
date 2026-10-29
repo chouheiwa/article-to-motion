@@ -376,6 +376,22 @@ func TestProductionPromptLeavesStyleFree(t *testing.T) {
 }
 
 // 各平台封面比例不同（抖音 4:3 + 3:4、B 站 16:10……）；这一节被删掉，交付物就只剩第 0 帧。
+// 章节交界过去是两个各自成立的镜头硬切在一起。交接约定写进分镜计划、由 am 发给
+// 两侧渲染器；手法表与「相邻章节交界换手法」是让它不退化成固定转场的那部分。
+func TestProductionPromptCarriesSceneHandoffs(t *testing.T) {
+	body := loadProduction()
+	for _, want := range []string{
+		"### 镜头交接", `"look"`, `"chapter"`, `"handoff"`, "`bridge`",
+		"不要给章节交界套一个统一的擦除或闪白", "相邻两个章节交界不得用同一种手法",
+		"`carry`", "`match`", "`push_in`", "`flood`", "`pan`", "`settle`",
+		"前一镜末帧与后一镜首帧",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("PROMPT-PRODUCTION.md 的镜头交接缺少 %q", want)
+		}
+	}
+}
+
 func TestProductionPromptRequiresPlatformCovers(t *testing.T) {
 	body := loadProduction()
 	for _, want := range []string{"douyin", "xiaohongshu", "channels", "bilibili", "zhihu", "16:10", "安全区", "covers/src/", "cover.images", "designed_image"} {
@@ -385,8 +401,8 @@ func TestProductionPromptRequiresPlatformCovers(t *testing.T) {
 	}
 }
 
-// 整片处理方案是分镜与每个镜头 prompt.md 的上游；它若开始重新定义配色和字体，
-// 就会和 frame.md 争夺视觉一致性的唯一来源。
+// 整片处理方案是分镜与每个镜头 prompt.md 的上游。配色由它全片定一次（各镜头自选
+// 时跨章节像换了一条视频），字体、版式和动效仍归镜头。
 func TestProductionPromptCarriesTreatment(t *testing.T) {
 	body := loadProduction()
 	for _, want := range []string{
@@ -394,7 +410,9 @@ func TestProductionPromptCarriesTreatment(t *testing.T) {
 		"production/treatment.md",
 		"钩子—揭示—收束",
 		"持续物件",
-		"配色、字体、版式和动效由各镜头根据文案自由决定",
+		"全片配色",
+		"字体、版式和动效由各镜头根据文案自由决定",
+		"章节之间怎么接",
 		"先改 `treatment.md`",
 		"- `production/treatment.md` 整片处理方案",
 	} {

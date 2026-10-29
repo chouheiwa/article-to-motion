@@ -33,10 +33,12 @@ func newSceneCuesCommand(stdout io.Writer) *cobra.Command {
 分镜计划（--plan，JSON）：
   {
     "schema": 1,
+    "look": {"background": "#0F1720", "ink": "#F5F1E8", "accent": "#F2B134"},
     "scenes": [
-      {"id": "scene-001", "dir": "scenes/scene-001"},
-      {"id": "scene-002", "dir": "scenes/scene-002", "first_subtitle": 5},
-      {"id": "scene-003", "dir": "scenes/scene-003", "first_phrase": "p-07", "cut": "mid_gap"}
+      {"id": "scene-001", "dir": "scenes/scene-001", "chapter": "问题"},
+      {"id": "scene-002", "dir": "scenes/scene-002", "chapter": "问题", "first_subtitle": 5},
+      {"id": "scene-003", "dir": "scenes/scene-003", "chapter": "机制", "first_phrase": "p-07", "cut": "mid_gap",
+       "handoff": {"device": "push_in", "bridge": "画面被琥珀色圆形表面铺满，中心一个 24px 的深色圆点"}}
     ]
   }
 
@@ -50,6 +52,15 @@ func newSceneCuesCommand(stdout io.Writer) *cobra.Command {
                     prev_end    切在锚点前一条字幕/短语结束处，空白并入本镜头
                     mid_gap     切在空白正中（向下取整）
                   前一条与锚点重叠、没有空白时，三种规则都切在锚点开始处。
+  look            可选，全片配色：background、ink、accent 必填，surface、accent_2 可选，
+                  一律 #RRGGBB。写了就进每个镜头的提示词与 am-scene.js，镜头不再自主选色
+  chapter         可选，镜头所属章节；写了就每个镜头都要写，相邻镜头章节不同即章节交界
+  handoff         从上一镜头进入本镜头的交接，章节交界必填、章节内可选：
+                    device  手法：` + handoffDeviceList() + `
+                    bridge  交界那一帧两侧共有的画面（物件、位置、大小、状态、底色），
+                            不超过 200 字
+                  相邻两个章节交界不得用同一种手法。交接写进两侧镜头的 timing.enter /
+                  timing.exit，两个镜头的渲染提示词拿到同一份约定。
 
 first_subtitle 与 first_phrase 每个镜头恰好填一个；第一个镜头固定从第 0 帧开始，
 可以不填。最后一个镜头延伸到 --total-frames。锚点必须严格递增，每个镜头至少一帧，
@@ -59,7 +70,8 @@ first_subtitle 与 first_phrase 每个镜头恰好填一个；第一个镜头固
 给了 --phrases 时，把短语时间轴原样复制进每个镜头目录（` + scene.PhraseCopyFile + `），
 并写进 timing.phrases，渲染时据此生成局部短语表。
 
-timing 块：{"fps", "start_frame", "end_frame_exclusive", "plan", "phrases"}，
+timing 块：{"fps", "start_frame", "end_frame_exclusive", "plan", "phrases",
+"chapter", "look", "enter", "exit"}，
 帧号是全片全局帧，plan 是分镜计划文件的 SHA-256。scene.json 其余字段与顺序不变。
 任何一处不合格都不写文件；内容没变的文件不重写。
 
@@ -147,12 +159,20 @@ func runSceneCues(opts sceneCuesOptions, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	enter, exit := scene.PlanHandoffs(plan)
+	var look scene.Look
+	if plan.Look != nil {
+		look = *plan.Look
+	}
 	results := make([]sceneCue, len(scenes))
 	for i, s := range scenes {
 		if s.Song != nil || s.Beat != nil {
 			return fmt.Errorf("镜头 %s 带 song 或 beat 块：歌曲与卡点镜头的时长不由 am scene cues 决定", s.ID)
 		}
-		timing := scene.Timing{FPS: fps, StartFrame: segments[i].StartFrame, EndFrameExclusive: segments[i].EndFrameExclusive, Plan: planSHA}
+		timing := scene.Timing{
+			FPS: fps, StartFrame: segments[i].StartFrame, EndFrameExclusive: segments[i].EndFrameExclusive, Plan: planSHA,
+			Chapter: plan.Scenes[i].Chapter, Look: look, Enter: enter[i], Exit: exit[i],
+		}
 		if phrases != nil {
 			timing.Phrases = scene.PhraseCopyFile
 		}
@@ -306,7 +326,26 @@ func describeTiming(t scene.Timing) string {
 	if len(plan) > 12 {
 		plan = plan[:12]
 	}
-	return fmt.Sprintf("%dfps [%d, %d) plan=%s phrases=%q", t.FPS, t.StartFrame, t.EndFrameExclusive, plan, t.Phrases)
+	text := fmt.Sprintf("%dfps [%d, %d) plan=%s phrases=%q", t.FPS, t.StartFrame, t.EndFrameExclusive, plan, t.Phrases)
+	if t.Chapter != "" || t.Look != (scene.Look{}) || t.Enter != (scene.Handoff{}) || t.Exit != (scene.Handoff{}) {
+		text += fmt.Sprintf(" chapter=%q look=%v enter=%s exit=%s", t.Chapter, t.Look != (scene.Look{}), describeHandoff(t.Enter), describeHandoff(t.Exit))
+	}
+	return text
+}
+
+func describeHandoff(h scene.Handoff) string {
+	if h == (scene.Handoff{}) {
+		return "-"
+	}
+	return h.Peer + "/" + h.Device
+}
+
+func handoffDeviceList() string {
+	ids := make([]string, len(scene.HandoffDevices))
+	for i, d := range scene.HandoffDevices {
+		ids[i] = d.ID
+	}
+	return strings.Join(ids, "、")
 }
 
 func printSceneCues(out io.Writer, results []sceneCue) {

@@ -82,7 +82,11 @@ func newReviewCommand(stdout io.Writer, projectRoot *string) *cobra.Command {
 					return err
 				}
 				for _, s := range scenes {
-					segments = append(segments, review.Segment{ID: s.ID, Frames: int(math.Round(s.DurationSeconds * float64(rate)))})
+					segment := review.Segment{ID: s.ID, Frames: int(math.Round(s.DurationSeconds * float64(rate)))}
+					if s.Timing != nil {
+						segment.Handoff, segment.CrossChapter = s.Timing.Enter.Device, s.Timing.Enter.CrossChapter
+					}
+					segments = append(segments, segment)
 				}
 			}
 			loudness, err := reviewLoudnessTarget(rootDir, silent)

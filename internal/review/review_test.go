@@ -21,6 +21,9 @@ type fakeProber struct {
 	countErr error
 	loudness mediaprobe.ProgramLoudness
 	measured int
+	// difference 是 FrameDifference 的返回值，按后一帧的时间点查。
+	difference map[float64]float64
+	compared   int
 }
 
 func (f *fakeProber) Probe(string) (mediaprobe.Media, error) { return f.media, nil }
@@ -30,6 +33,10 @@ func (f *fakeProber) FrameStats(_ string, at float64) (mediaprobe.FrameStats, er
 		return mediaprobe.FrameStats{AtSeconds: at, Mean: 0, StdDev: 0}, nil
 	}
 	return mediaprobe.FrameStats{AtSeconds: at, Mean: 100, StdDev: 40}, nil
+}
+func (f *fakeProber) FrameDifference(_ string, _, b float64) (float64, error) {
+	f.compared++
+	return f.difference[b], nil
 }
 func (f *fakeProber) MeasureProgramLoudness(string) (mediaprobe.ProgramLoudness, error) {
 	f.measured++
@@ -49,7 +56,49 @@ func media(video, audio float64, withAudio bool) mediaprobe.Media {
 	return m
 }
 
-func segments() []Segment { return []Segment{{"s1", 30}, {"s2", 60}, {"s3", 30}} }
+func segments() []Segment {
+	return []Segment{{ID: "s1", Frames: 30}, {ID: "s2", Frames: 60}, {ID: "s3", Frames: 30}}
+}
+
+func TestHandoffSeamsAreComparedOnlyWhereDeclared(t *testing.T) {
+	segs := []Segment{{ID: "s1", Frames: 30}, {ID: "s2", Frames: 60, Handoff: "push_in", CrossChapter: true}, {ID: "s3", Frames: 30}}
+	p := &fakeProber{media: media(4, 4.02, true), frames: 120, difference: map[float64]float64{1: 3}}
+	report, err := Run(p, Options{Video: "final.mp4", FPS: 30, Segments: segs, OutDir: "out"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.compared != 1 {
+		t.Fatalf("只有声明了交接的交界才比对，实际比对 %d 次", p.compared)
+	}
+	if !report.OK || len(report.Hints) != 0 {
+		t.Fatalf("接上的交界不应报问题或提示：%v %v", report.Problems, report.Hints)
+	}
+	if c := report.Cuts[0]; c.Handoff != "push_in" || c.Difference == nil || *c.Difference != 3 {
+		t.Fatalf("交界记录不符：%+v", c)
+	}
+	if report.Cuts[1].Difference != nil {
+		t.Fatalf("硬切交界不应有差异值：%+v", report.Cuts[1])
+	}
+}
+
+func TestBrokenHandoffFailsAndLooseHandoffHints(t *testing.T) {
+	segs := []Segment{{ID: "s1", Frames: 30}, {ID: "s2", Frames: 60, Handoff: "flood", CrossChapter: true}, {ID: "s3", Frames: 30, Handoff: "carry"}}
+	p := &fakeProber{media: media(4, 4.02, true), frames: 120, difference: map[float64]float64{1: 70, 3: 25}}
+	report, err := Run(p, Options{Video: "final.mp4", FPS: 30, Segments: segs, OutDir: "out"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.OK || len(report.Problems) != 1 || !strings.Contains(report.Problems[0], "s1 → s2 章节交界") {
+		t.Fatalf("没接上的章节交界应判不合格：%v", report.Problems)
+	}
+	found := false
+	for _, hint := range report.Hints {
+		found = found || strings.Contains(hint, "s2 → s3 交界")
+	}
+	if !found {
+		t.Fatalf("差异中等的交界应进提示：%v", report.Hints)
+	}
+}
 
 func TestHealthyFilmPasses(t *testing.T) {
 	p := &fakeProber{media: media(4, 4.02, true), frames: 120}
@@ -163,7 +212,7 @@ func TestRunRejectsBadOptionsAndPropagatesErrors(t *testing.T) {
 	if _, err := Run(&fakeProber{media: media(1, 1, true)}, Options{Video: "x", FPS: 0}); err == nil {
 		t.Error("帧率为 0 应报错")
 	}
-	if _, err := Run(&fakeProber{media: media(1, 1, true)}, Options{Video: "x", FPS: 30, Segments: []Segment{{"s", 0}}}); err == nil {
+	if _, err := Run(&fakeProber{media: media(1, 1, true)}, Options{Video: "x", FPS: 30, Segments: []Segment{{ID: "s", Frames: 0}}}); err == nil {
 		t.Error("镜头帧数为 0 应报错")
 	}
 	boom := errors.New("boom")
@@ -197,7 +246,7 @@ func TestRunAgainstRealFfmpeg(t *testing.T) {
 		t.Fatal(err)
 	}
 	outDir := filepath.Join(dir, "review")
-	report, err := Run(tc, Options{Video: film, FPS: 30, Segments: []Segment{{"a", 30}, {"b", 30}}, OutDir: outDir, ThumbWidth: 64})
+	report, err := Run(tc, Options{Video: film, FPS: 30, Segments: []Segment{{ID: "a", Frames: 30}, {ID: "b", Frames: 30}}, OutDir: outDir, ThumbWidth: 64})
 	if err != nil {
 		t.Fatal(err)
 	}

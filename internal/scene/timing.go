@@ -29,12 +29,20 @@ const PhraseCopyFile = "phrase-timeline.json"
 // 帧号都是全局帧，区间左闭右开。Plan 是分镜计划文件的 SHA-256，
 // 用来发现「计划改了却没重跑 am scene cues」。Phrases 可省略，是镜头目录内
 // 短语时间轴副本的相对路径。
+//
+// Chapter、Look、Enter、Exit 抄自分镜计划：渲染器互相看不到，相邻两个镜头只能
+// 从这里拿到同一份配色与交接约定。字段全是可比较的值类型，--check 直接用 != 比对。
 type Timing struct {
 	FPS               int    `json:"fps"`
 	StartFrame        int    `json:"start_frame"`
 	EndFrameExclusive int    `json:"end_frame_exclusive"`
 	Plan              string `json:"plan"`
 	Phrases           string `json:"phrases,omitempty"`
+	Chapter           string `json:"chapter,omitempty"`
+	Look              Look   `json:"look,omitzero"`
+	// Enter 是上一镜头交给本镜头的交接，Exit 是本镜头交给下一镜头的交接。
+	Enter Handoff `json:"enter,omitzero"`
+	Exit  Handoff `json:"exit,omitzero"`
 }
 
 // Frames 是镜头的帧数。
@@ -80,6 +88,19 @@ func VerifyTimingInputs(s Scene) error {
 	}
 	if err := VerifyFrameAlignment(s); err != nil {
 		problems = append(problems, err.Error())
+	}
+	if t.Look != (Look{}) {
+		if err := verifyLook(&t.Look); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
+	for _, side := range []struct {
+		name string
+		h    Handoff
+	}{{"enter", t.Enter}, {"exit", t.Exit}} {
+		if side.h != (Handoff{}) && (!handoffDeviceValid(side.h.Device) || side.h.Peer == "" || strings.TrimSpace(side.h.Bridge) == "") {
+			problems = append(problems, fmt.Sprintf("timing.%s 不完整或手法未知：交接约定由 am scene cues 写入，不要手改", side.name))
+		}
 	}
 	if t.Phrases != "" {
 		if _, err := LoadPhraseTimelineIn(s.Directory, t.Phrases, t.FPS); err != nil {
@@ -171,6 +192,7 @@ const (
 // TimingPlan 是 am scene cues 的分镜计划。
 type TimingPlan struct {
 	Schema int         `json:"schema"`
+	Look   *Look       `json:"look,omitempty"`
 	Scenes []PlanEntry `json:"scenes"`
 }
 
@@ -188,7 +210,82 @@ type PlanEntry struct {
 	VisualRole string `json:"visual_role,omitempty"`
 	// Summary 是给人看的一句话镜头说明，不参与计时。
 	Summary string `json:"summary,omitempty"`
+	// Chapter 是镜头所属章节。写了就每个镜头都要写；相邻镜头章节不同即章节交界。
+	Chapter string `json:"chapter,omitempty"`
+	// Handoff 是从上一镜头进入本镜头的交接，章节交界必填。
+	Handoff *PlanHandoff `json:"handoff,omitempty"`
 }
+
+// Look 是全片共用的配色。镜头各自选色时，跨章节的两个镜头常常连底色都不同，
+// 转场做得再顺也像换了一条视频。Surface 与 Accent2 可省略。
+type Look struct {
+	Background string `json:"background"`
+	Surface    string `json:"surface,omitempty"`
+	Ink        string `json:"ink"`
+	Accent     string `json:"accent"`
+	Accent2    string `json:"accent_2,omitempty"`
+}
+
+// PlanHandoff 是计划里一个交界的交接约定：用哪种手法，以及交界那一帧
+// 两侧共有的画面（哪个物件、在哪、多大、什么状态，底色是什么）。
+type PlanHandoff struct {
+	Device string `json:"device"`
+	Bridge string `json:"bridge"`
+}
+
+// Handoff 是写进 timing 块的一侧交接。Peer 是交界另一侧的镜头 id；
+// CrossChapter 标记这是章节交界。零值表示该侧没有交接约定（硬切）。
+type Handoff struct {
+	Peer         string `json:"peer"`
+	Device       string `json:"device"`
+	Bridge       string `json:"bridge"`
+	CrossChapter bool   `json:"cross_chapter,omitempty"`
+}
+
+// 交接手法。全部是「靠画面里的东西接过去」，没有一种是叠加在画面上的通用擦除：
+// 章节交界要像章节内部一样自然，不能每次套同一个转场。
+const (
+	HandoffCarry  = "carry"
+	HandoffMatch  = "match"
+	HandoffPushIn = "push_in"
+	HandoffFlood  = "flood"
+	HandoffPan    = "pan"
+	HandoffSettle = "settle"
+)
+
+// HandoffDevices 是 handoff.device 的合法取值与给渲染器的说明，顺序即文档顺序。
+var HandoffDevices = []struct{ ID, Guide string }{
+	{HandoffCarry, "接力：同一个物件跨过交界，交界帧上它的位置、大小、颜色与状态两侧一致，下一镜头接着让它变化"},
+	{HandoffMatch, "形状匹配：上一镜头某元素在末帧的轮廓、位置与大小，与下一镜头某个不同元素在首帧的完全重合（圆点变成地球、进度条变成时间轴）"},
+	{HandoffPushIn, "推进穿越：镜头推进到上一镜头某元素内部，该元素的表面铺满画面，成为下一镜头的底面"},
+	{HandoffFlood, "色块铺满：上一镜头某元素扩张到铺满画面，它的颜色成为下一镜头开场的底色，再从中长出新内容"},
+	{HandoffPan, "平移续接：同一张底面朝一个方向平移，上一镜头内容移出画面，下一镜头内容从另一侧移入，交界帧只剩共享底面与跨界物件"},
+	{HandoffSettle, "退回底色：上一镜头语义元素退场，交界帧只剩全片底色与一个保留元素，下一镜头从这个元素长出"},
+}
+
+func handoffDeviceValid(device string) bool {
+	for _, d := range HandoffDevices {
+		if d.ID == device {
+			return true
+		}
+	}
+	return false
+}
+
+// HandoffGuide 返回手法的说明；未知手法返回空串。
+func HandoffGuide(device string) string {
+	for _, d := range HandoffDevices {
+		if d.ID == device {
+			return d.Guide
+		}
+	}
+	return ""
+}
+
+var hexColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// maxBridgeRunes 限制 bridge 的长度：它描述的是一帧画面，写成段落说明分镜还没想清楚。
+const maxBridgeRunes = 200
 
 // VisualRoles 是 visual_role 的合法取值，与制作提示词第五阶段的四种视觉角色一致。
 var VisualRoles = []string{"语境", "证据", "机制", "节奏"}
@@ -244,7 +341,114 @@ func ParseTimingPlan(body []byte) (TimingPlan, error) {
 			return TimingPlan{}, fmt.Errorf("%s（%s）固定从第 0 帧开始，不能写 cut", where, entry.ID)
 		}
 	}
+	if err := verifyLook(plan.Look); err != nil {
+		return TimingPlan{}, err
+	}
+	if err := verifyHandoffs(plan.Scenes); err != nil {
+		return TimingPlan{}, err
+	}
 	return plan, nil
+}
+
+func verifyLook(look *Look) error {
+	if look == nil {
+		return nil
+	}
+	var problems []string
+	for _, field := range []struct {
+		key, value string
+		required   bool
+	}{
+		{"background", look.Background, true}, {"surface", look.Surface, false}, {"ink", look.Ink, true},
+		{"accent", look.Accent, true}, {"accent_2", look.Accent2, false},
+	} {
+		switch {
+		case field.value == "" && field.required:
+			problems = append(problems, fmt.Sprintf("look.%s 必填", field.key))
+		case field.value != "" && !hexColorPattern.MatchString(field.value):
+			problems = append(problems, fmt.Sprintf("look.%s 必须是 #RRGGBB，收到 %q", field.key, field.value))
+		}
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("分镜计划的 look 不合格：%s", strings.Join(problems, "；"))
+	}
+	return nil
+}
+
+// verifyHandoffs 校验章节与交接约定。
+//
+// 章节交界必须写 handoff：不写就是两个各自成立的镜头硬切在一起，正是要消除的生硬。
+// 相邻两个章节交界不得用同一种手法——每次都同一个动作，观众第二次就看出套路了。
+func verifyHandoffs(entries []PlanEntry) error {
+	chaptered := 0
+	for _, entry := range entries {
+		if strings.TrimSpace(entry.Chapter) != "" {
+			chaptered++
+		}
+	}
+	if chaptered != 0 && chaptered != len(entries) {
+		return fmt.Errorf("分镜计划的 chapter 要么每个镜头都写，要么都不写（%d 个镜头里写了 %d 个）", len(entries), chaptered)
+	}
+	var problems []string
+	lastChapterDevice := ""
+	for i, entry := range entries {
+		where := fmt.Sprintf("镜头 %s", entry.ID)
+		h := entry.Handoff
+		if i == 0 {
+			if h != nil {
+				problems = append(problems, where+"是第一个镜头，没有上一镜头可交接，不能写 handoff")
+			}
+			continue
+		}
+		crossChapter := chaptered > 0 && entry.Chapter != entries[i-1].Chapter
+		if h == nil {
+			if crossChapter {
+				problems = append(problems, fmt.Sprintf("%s开始新章节「%s」，必须写 handoff 说明如何从上一章接过来", where, entry.Chapter))
+			}
+			continue
+		}
+		if !handoffDeviceValid(h.Device) {
+			ids := make([]string, len(HandoffDevices))
+			for j, d := range HandoffDevices {
+				ids[j] = d.ID
+			}
+			problems = append(problems, fmt.Sprintf("%s的 handoff.device 只能是 %s，收到 %q", where, strings.Join(ids, "、"), h.Device))
+		}
+		bridge := strings.TrimSpace(h.Bridge)
+		switch {
+		case bridge == "":
+			problems = append(problems, where+"的 handoff.bridge 为空：要写清交界那一帧两侧共有的画面")
+		case len([]rune(bridge)) > maxBridgeRunes:
+			problems = append(problems, fmt.Sprintf("%s的 handoff.bridge 超过 %d 字：只描述交界那一帧", where, maxBridgeRunes))
+		}
+		if crossChapter {
+			if h.Device == lastChapterDevice {
+				problems = append(problems, fmt.Sprintf("%s与上一个章节交界都用 %s：相邻章节交界换一种手法", where, h.Device))
+			}
+			lastChapterDevice = h.Device
+		}
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("分镜计划的章节与交接不合格：\n  - %s", strings.Join(problems, "\n  - "))
+	}
+	return nil
+}
+
+// PlanHandoffs 把计划里的交接约定展开成每个镜头两侧的 Handoff，下标与 plan.Scenes 一致。
+func PlanHandoffs(plan TimingPlan) (enter, exit []Handoff) {
+	enter = make([]Handoff, len(plan.Scenes))
+	exit = make([]Handoff, len(plan.Scenes))
+	for i := 1; i < len(plan.Scenes); i++ {
+		h := plan.Scenes[i].Handoff
+		if h == nil {
+			continue
+		}
+		cross := plan.Scenes[i].Chapter != plan.Scenes[i-1].Chapter
+		bridge := strings.TrimSpace(h.Bridge)
+		enter[i] = Handoff{Peer: plan.Scenes[i-1].ID, Device: h.Device, Bridge: bridge, CrossChapter: cross}
+		exit[i-1] = Handoff{Peer: plan.Scenes[i].ID, Device: h.Device, Bridge: bridge, CrossChapter: cross}
+	}
+	return enter, exit
 }
 
 // TimingSegment 是 LayoutTiming 算出的一个镜头区间（全局帧，左闭右开）。

@@ -257,3 +257,55 @@ func TestTimingIsAnOptionalField(t *testing.T) {
 		t.Fatal("timing 应是 scene.json 的可选字段")
 	}
 }
+
+func TestParseTimingPlanValidatesChaptersAndHandoffs(t *testing.T) {
+	head := `{"schema":1,"scenes":[{"id":"a","dir":"a","chapter":"一"},`
+	cases := map[string]string{
+		head + `{"id":"b","dir":"b","first_subtitle":2}]}`:                                                                                      "要么每个镜头都写",
+		head + `{"id":"b","dir":"b","first_subtitle":2,"chapter":"二"}]}`:                                                                        "必须写 handoff",
+		head + `{"id":"b","dir":"b","first_subtitle":2,"chapter":"二","handoff":{"device":"wipe","bridge":"x"}}]}`:                               "handoff.device 只能是",
+		head + `{"id":"b","dir":"b","first_subtitle":2,"chapter":"二","handoff":{"device":"pan","bridge":" "}}]}`:                                "bridge 为空",
+		head + `{"id":"b","dir":"b","first_subtitle":2,"chapter":"二","handoff":{"device":"pan","bridge":"` + strings.Repeat("长", 201) + `"}}]}`: "超过 200 字",
+		`{"schema":1,"scenes":[{"id":"a","dir":"a","handoff":{"device":"pan","bridge":"x"}}]}`:                                                  "不能写 handoff",
+		`{"schema":1,"look":{"background":"#000","ink":"#ffffff","accent":"#ffffff"},"scenes":[{"id":"a","dir":"a"}]}`:                          "look.background 必须是 #RRGGBB",
+		`{"schema":1,"look":{"background":"#000000","accent":"#ffffff"},"scenes":[{"id":"a","dir":"a"}]}`:                                       "look.ink 必填",
+		head + `{"id":"b","dir":"b","first_subtitle":2,"chapter":"二","handoff":{"device":"pan","bridge":"底面"}},` +
+			`{"id":"c","dir":"c","first_subtitle":3,"chapter":"三","handoff":{"device":"pan","bridge":"底面"}}]}`: "换一种手法",
+	}
+	for body, want := range cases {
+		if _, err := ParseTimingPlan([]byte(body)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s 应报 %q，实际 %v", body, want, err)
+		}
+	}
+	// 章节内的交接可选；同一手法隔开一个章节交界后可以再用。
+	body := `{"schema":1,"look":{"background":"#0F1720","ink":"#F5F1E8","accent":"#F2B134"},"scenes":[` +
+		`{"id":"a","dir":"a","chapter":"一"},` +
+		`{"id":"b","dir":"b","first_subtitle":2,"chapter":"一","handoff":{"device":"carry","bridge":"左上角的计数器"}},` +
+		`{"id":"c","dir":"c","first_subtitle":3,"chapter":"二","handoff":{"device":"flood","bridge":"满屏琥珀色"}},` +
+		`{"id":"d","dir":"d","first_subtitle":4,"chapter":"三","handoff":{"device":"carry","bridge":" 中央的圆点 "}}]}`
+	plan, err := ParseTimingPlan([]byte(body))
+	if err != nil {
+		t.Fatalf("合法计划解析失败：%v", err)
+	}
+	enter, exit := PlanHandoffs(plan)
+	if enter[0] != (Handoff{}) || exit[3] != (Handoff{}) {
+		t.Fatalf("首镜无入场、末镜无出场：%+v %+v", enter[0], exit[3])
+	}
+	if want := (Handoff{Peer: "a", Device: "carry", Bridge: "左上角的计数器"}); enter[1] != want {
+		t.Errorf("章节内入场：%+v", enter[1])
+	}
+	if want := (Handoff{Peer: "d", Device: "carry", Bridge: "中央的圆点", CrossChapter: true}); exit[2] != want {
+		t.Errorf("章节交界出场应去掉首尾空白并标记章节：%+v", exit[2])
+	}
+	if enter[2].Peer != "b" || exit[1].Peer != "c" || enter[2].Bridge != exit[1].Bridge {
+		t.Errorf("同一交界两侧应拿到同一份约定：%+v %+v", exit[1], enter[2])
+	}
+}
+
+func TestVerifyTimingInputsRejectsHandEditedHandoff(t *testing.T) {
+	s := timedScene(t, "1.000000", `{"fps":30,"start_frame":0,"end_frame_exclusive":30,"plan":"`+testPlanSHA+`","enter":{"peer":"x","device":"wipe","bridge":"y"},"look":{"background":"red","ink":"#ffffff","accent":"#ffffff"}}`)
+	err := VerifyTimingInputs(s)
+	if err == nil || !strings.Contains(err.Error(), "timing.enter") || !strings.Contains(err.Error(), "look.background") {
+		t.Fatalf("手改的交接与配色应被拦下：%v", err)
+	}
+}
