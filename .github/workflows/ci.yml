@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
       - uses: actions/setup-node@v6
         with:
@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
       # mediaprobe / concat 的集成测试要真实的 ffmpeg 和 ffprobe。
       # 不装的话它们会自行跳过——测试仍然"通过"，但覆盖率会掉到门禁线以下，
@@ -65,7 +65,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
       # 只重跑文本产物。示例 PNG 在 -examples 开关后面，不参与这道门：
       # 不同版本的 rsvg-convert 输出字节不同，纳进来会让门随 runner 随机失败。
@@ -81,7 +81,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
       - name: Formatting
         run: test -z "$(gofmt -l .)"

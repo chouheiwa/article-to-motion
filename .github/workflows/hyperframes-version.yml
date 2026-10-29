@@ -24,11 +24,13 @@ jobs:
         id: pinned
         run: |
           set -euo pipefail
-          # internal/cli/cli.go 的 hyperframesVersion 是唯一来源。
-          version="$(grep -oE 'hyperframesVersion = "[0-9]+\.[0-9]+\.[0-9]+"' internal/cli/cli.go \
-            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+          # internal/hyperframes/hyperframes.go 的 PinnedVersion 是唯一来源。
+          # 解析失败要和「上游有新版」区分开：过去常量挪了位置，这一步静默失败了两个月，
+          # 一直被当成版本提醒没人看。
+          version="$(grep -oE 'const PinnedVersion = "[0-9]+\.[0-9]+\.[0-9]+"' internal/hyperframes/hyperframes.go \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
           if [ -z "$version" ]; then
-            echo "没能从 internal/cli/cli.go 解析出 hyperframesVersion" >&2
+            echo "::error::没能从 internal/hyperframes/hyperframes.go 解析出 PinnedVersion，先修这个 workflow" >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -73,7 +75,9 @@ jobs:
              没有任何测试能守住它与上游 \`rules-index.md\` 的一致性。
           2. 比对 \`fontData.generated.ts\` 的字节数，确认自动内联字体清单没变，
              并同步 \`internal/validate\` 的 \`autoEmbeddedFonts\` 注释。
-          3. 改 \`internal/cli/cli.go\` 的 \`hyperframesVersion\`，它是唯一来源。
+          3. 改 \`internal/hyperframes/hyperframes.go\` 的 \`PinnedVersion\`（唯一来源），
+             同时更新 \`PinnedSkillsCommit\`（新 tag 指向的 commit）与 \`PinnedSkillsCount\`，
+             再跑 \`go generate ./internal/preset/\` 更新下发提示词里的版本号。
           EOF
           echo "::error::HyperFrames 已发布 $latest，仓库仍固定在 $pinned"
           exit 1
