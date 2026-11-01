@@ -168,7 +168,8 @@ func TestRunSongAlwaysAddsContract(t *testing.T) {
 	os.WriteFile(filepath.Join(root, "article-to-motion.conf"), []byte("ORCHESTRATOR=codex\nRENDERER=claude\n"), 0644)
 	os.WriteFile(filepath.Join(root, "custom.md"), []byte("CUSTOM-PROMPT"), 0644)
 	bin := t.TempDir()
-	os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\n/bin/cat\n"), 0755)
+	received := filepath.Join(t.TempDir(), "received.txt")
+	os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\n/bin/cat > '"+received+"'\n"), 0755)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("ORCHESTRATOR", "codex")
 	t.Chdir(root)
@@ -177,10 +178,14 @@ func TestRunSongAlwaysAddsContract(t *testing.T) {
 		if code := Execute(args, &out, &err); code != 0 {
 			t.Fatal(err.String())
 		}
-		if !strings.Contains(out.String(), "歌曲模式必要契约") || !strings.Contains(out.String(), "不得代替用户选择") {
-			t.Fatal(out.String())
+		body, readErr := os.ReadFile(received)
+		if readErr != nil {
+			t.Fatal(readErr)
 		}
-		if len(args) > 1 && !strings.Contains(out.String(), "CUSTOM-PROMPT") {
+		if !strings.Contains(string(body), "歌曲模式必要契约") || !strings.Contains(string(body), "不得代替用户选择") {
+			t.Fatal(string(body))
+		}
+		if len(args) > 1 && !strings.Contains(string(body), "CUSTOM-PROMPT") {
 			t.Fatal("lost explicit prompt")
 		}
 	}

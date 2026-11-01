@@ -191,6 +191,19 @@ am --unsafe run
 
 `--unsafe` 会传递给嵌套镜头任务。安全模式需要额外传递的环境变量通过 `AM_PASSTHROUGH_ENV=NAME1,NAME2` 显式列出。
 
+安全模式下，编排工具（`am run`）只被放行文件编辑和一组命令：`am`、`ffmpeg`、`ffprobe`、`ls`、`mkdir`、固定版本的 `npx --yes hyperframes@…`，以及 `TTS_PROVIDER` 与 `ALIGN_PROVIDER` 各自对应的那一个命令（如 `mmx`、`edge-tts`、`mlx_audio.stt.generate`；`funasr` 对应 `python3`）。安装命令（`brew`、`pip`、`uv`、`npm`）不在其中，相关工具要先自己装好。各工具的实现方式不同：
+
+| 工具 | 安全模式的限制方式 |
+|---|---|
+| claude、codebuddy | `acceptEdits` 加 `--settings` 白名单；`.env` 禁读。Claude Code 的 `acceptEdits` 自身还会放行工作区内的 `touch`、`mkdir`、`rm` 等文件系统命令 |
+| qoder | `accept_edits` 加逐条 `--allowed-tools` |
+| codex | 没有命令白名单，由 `workspace-write` 沙箱限制写入范围；为了 TTS 放开了沙箱网络 |
+| opencode | 没有可用的白名单机制，安全模式下仍能执行任何命令 |
+
+codebuddy 的这套参数没有经过完整实测。
+
+`am run` 的终端输出是整理过的事件：开头打印会话 id，正文原样打印，每次工具调用一行摘要，失败的工具结果用 `✗` 标出，结尾打印用量。
+
 ## 视觉检查与拼接
 
 渲染成功不等于画面正确：文字压在图形上看不清、中文字体静默回退成方框、动画在中途就停住，这些都能拿到退出码 0。抽帧看图是唯一能提前发现它们的手段。

@@ -13,13 +13,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/chouheiwa/articale-to-motion/internal/config"
 	"github.com/chouheiwa/articale-to-motion/internal/determinism"
 	"github.com/chouheiwa/articale-to-motion/internal/envutil"
 	"github.com/chouheiwa/articale-to-motion/internal/mediaprobe"
+	"github.com/chouheiwa/articale-to-motion/internal/procgroup"
 	"github.com/chouheiwa/articale-to-motion/internal/tools"
 )
 
@@ -126,31 +126,14 @@ func Run(ctx context.Context, s Scene, cfg config.Config, unsafe bool, baseEnv m
 	cmd.Env = environmentList(cfg.ChildEnvironment(baseEnv, unsafe, passthrough))
 	cmd.Stdin = nil
 	cmd.Stderr = stderrFile
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
 	}
-	if err := cmd.Start(); err != nil {
+	wait, err := procgroup.Start(ctx, cmd, terminateGrace)
+	if err != nil {
 		return fmt.Errorf("启动渲染器：%w", err)
 	}
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-			timer := time.NewTimer(terminateGrace)
-			select {
-			case <-done:
-				if !timer.Stop() {
-					<-timer.C
-				}
-			case <-timer.C:
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-			}
-		case <-done:
-		}
-	}()
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
@@ -162,8 +145,7 @@ func Run(ctx context.Context, s Scene, cfg config.Config, unsafe bool, baseEnv m
 			fmt.Fprintln(userOutput, message)
 		}
 	}
-	waitErr := cmd.Wait()
-	close(done)
+	waitErr := wait()
 	if ctx.Err() != nil {
 		return fmt.Errorf("已中断：渲染器进程组已终止")
 	}

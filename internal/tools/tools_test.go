@@ -3,6 +3,7 @@ package tools
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -56,23 +57,34 @@ func TestUnknownToolFailsClosed(t *testing.T) {
 }
 
 func TestOrchestratorInvocationUsesSafeWorkspaceMode(t *testing.T) {
-	got, stdin, err := OrchestratorInvocation("codex", "/work", "prompt", false)
+	got, stdin, err := OrchestratorInvocation("codex", OrchestratorOptions{Workdir: "/work", Prompt: "prompt"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"codex", "--ask-for-approval", "never", "exec", "--skip-git-repo-check", "--cd", "/work", "--sandbox", "workspace-write", "-"}
+	want := []string{"codex", "--ask-for-approval", "never", "-c", "sandbox_workspace_write.network_access=true", "exec", "--skip-git-repo-check", "--cd", "/work", "--sandbox", "workspace-write", "--json", "-"}
 	if !reflect.DeepEqual(got, want) || stdin != "prompt" {
 		t.Fatalf("got=%#v stdin=%q", got, stdin)
 	}
 }
 
 func TestOrchestratorInvocationUnsafeSkipsGitCheck(t *testing.T) {
-	got, stdin, err := OrchestratorInvocation("codex", "/work", "prompt", true)
+	got, stdin, err := OrchestratorInvocation("codex", OrchestratorOptions{Workdir: "/work", Prompt: "prompt", Unsafe: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"codex", "exec", "--skip-git-repo-check", "--cd", "/work", "--dangerously-bypass-approvals-and-sandbox", "-"}
+	want := []string{"codex", "exec", "--skip-git-repo-check", "--cd", "/work", "--dangerously-bypass-approvals-and-sandbox", "--json", "-"}
 	if !reflect.DeepEqual(got, want) || stdin != "prompt" {
+		t.Fatalf("got=%#v stdin=%q", got, stdin)
+	}
+}
+
+func TestCodexResumeKeepsPromptOnStdin(t *testing.T) {
+	got, stdin, err := OrchestratorInvocation("codex", OrchestratorOptions{Workdir: "/work", Prompt: "next", SessionID: "t1", Resume: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tail := got[len(got)-4:]
+	if !reflect.DeepEqual(tail, []string{"--json", "resume", "t1", "-"}) || stdin != "next" {
 		t.Fatalf("got=%#v stdin=%q", got, stdin)
 	}
 }
@@ -81,16 +93,98 @@ func TestAllOrchestratorInvocations(t *testing.T) {
 	for _, tool := range []string{"codex", "claude", "qoder", "codebuddy", "opencode"} {
 		for _, unsafe := range []bool{false, true} {
 			t.Run(tool+map[bool]string{false: "-safe", true: "-unsafe"}[unsafe], func(t *testing.T) {
-				argv, _, err := OrchestratorInvocation(tool, "/work", "prompt", unsafe)
+				argv, stdin, err := OrchestratorInvocation(tool, OrchestratorOptions{Workdir: "/work", Prompt: "prompt", Unsafe: unsafe})
 				if err != nil || len(argv) == 0 || argv[0] == "" {
 					t.Fatalf("argv=%v err=%v", argv, err)
+				}
+				joined := strings.Join(argv, " ")
+				if !strings.Contains(joined, "json") {
+					t.Fatalf("编排调用必须输出结构化流：%v", argv)
+				}
+				if strings.Contains(joined, "--dir") {
+					t.Fatalf("opencode 2.x 已去掉 --dir：%v", argv)
+				}
+				if stdin != "prompt" && argv[len(argv)-1] != "prompt" && !strings.Contains(joined, " prompt ") {
+					t.Fatalf("prompt 没有传进去：%v stdin=%q", argv, stdin)
 				}
 			})
 		}
 	}
-	if _, _, err := OrchestratorInvocation("bad", "/work", "prompt", false); err == nil {
+	if _, _, err := OrchestratorInvocation("bad", OrchestratorOptions{Workdir: "/work", Prompt: "prompt"}); err == nil {
 		t.Fatal("expected unknown tool failure")
 	}
+}
+
+func TestOrchestratorSessionArguments(t *testing.T) {
+	tests := []struct {
+		tool   string
+		resume bool
+		want   []string
+	}{
+		{"claude", false, []string{"--session-id", "s1"}},
+		{"claude", true, []string{"--resume", "s1"}},
+		{"codebuddy", false, []string{"--session-id", "s1"}},
+		{"codebuddy", true, []string{"--resume", "s1"}},
+		{"qoder", false, []string{"--session-id", "s1"}},
+		{"qoder", true, []string{"-r", "s1"}},
+		{"opencode", true, []string{"-s", "s1"}},
+	}
+	for _, test := range tests {
+		argv, _, err := OrchestratorInvocation(test.tool, OrchestratorOptions{Workdir: "/work", Prompt: "p", SessionID: "s1", Resume: test.resume})
+		if err != nil {
+			t.Fatalf("%s: %v", test.tool, err)
+		}
+		if !strings.Contains(strings.Join(argv, " "), strings.Join(test.want, " ")) {
+			t.Fatalf("%s resume=%v: %v 缺少 %v", test.tool, test.resume, argv, test.want)
+		}
+	}
+	for _, tool := range []string{"codex", "opencode"} {
+		if PresetSessionID(tool) {
+			t.Fatalf("%s 的会话 id 只能从输出流读", tool)
+		}
+		if _, _, err := OrchestratorInvocation(tool, OrchestratorOptions{Prompt: "p", SessionID: "s1"}); err == nil {
+			t.Fatalf("%s 不能预先指定会话 id", tool)
+		}
+	}
+	if _, _, err := OrchestratorInvocation("claude", OrchestratorOptions{Prompt: "p", Resume: true}); err == nil {
+		t.Fatal("续接缺 id 应当报错")
+	}
+}
+
+func TestOrchestratorSafeModeAllowsListedCommands(t *testing.T) {
+	access := OrchestratorAccess{Commands: []string{"am", "ffprobe"}}
+	argv, _, err := OrchestratorInvocation("qoder", OrchestratorOptions{Prompt: "p", Access: access})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(argv, " ")
+	for _, want := range []string{"--permission-mode accept_edits", "--allowed-tools Bash(am:*)", "--allowed-tools Bash(ffprobe:*)"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("qoder 缺少 %q：%v", want, argv)
+		}
+	}
+	if strings.Contains(joined, "dont_ask") {
+		t.Fatalf("dont_ask 连写文件都拒，不能用于编排：%v", argv)
+	}
+	for _, tool := range []string{"claude", "codebuddy"} {
+		argv, _, err := OrchestratorInvocation(tool, OrchestratorOptions{Prompt: "p", Access: access})
+		if err != nil {
+			t.Fatal(err)
+		}
+		settings := argv[indexOf(argv, "--settings")+1]
+		if !strings.Contains(settings, `"Bash(am:*)"`) || !strings.Contains(settings, `"Read(**/.env)"`) {
+			t.Fatalf("%s settings=%s", tool, settings)
+		}
+	}
+}
+
+func indexOf(values []string, target string) int {
+	for i, value := range values {
+		if value == target {
+			return i
+		}
+	}
+	return -2
 }
 
 func TestExtractMessagesForEveryStreamShape(t *testing.T) {

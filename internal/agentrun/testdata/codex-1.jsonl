@@ -1,0 +1,7 @@
+{"type": "thread.started", "thread_id": "01a19706-15cc-7c23-92b3-d0008785ee57"}
+{"type": "turn.started"}
+{"type": "item.completed", "item": {"id": "item_0", "type": "agent_message", "text": "我会记住这个单词，并创建文件。\n"}}
+{"type": "item.started", "item": {"id": "item_1", "type": "command_execution", "command": "/bin/zsh -lc \"printf 'hi' > note.txt\"", "aggregated_output": "", "exit_code": null, "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_1", "type": "command_execution", "command": "/bin/zsh -lc \"printf 'hi' > note.txt\"", "aggregated_output": "", "exit_code": 0, "status": "completed"}}
+{"type": "item.completed", "item": {"id": "item_2", "type": "agent_message", "text": "OK"}}
+{"type": "turn.completed", "usage": {"input_tokens": 41579, "cached_input_tokens": 32768, "cache_write_input_tokens": 0, "output_tokens": 55, "reasoning_output_tokens": 0}}

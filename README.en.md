@@ -157,6 +157,10 @@ Scenes with an accepted output and unchanged inputs are skipped. When an output 
 
 AI CLIs run in project-scoped safe mode by default. `am --unsafe run` explicitly restores bypass/auto-approval behavior and should only be used for trusted projects. Extra environment variables in safe mode must be named in `AM_PASSTHROUGH_ENV`.
 
+In safe mode the orchestrator (`am run`) may edit files and run only an allowlist: `am`, `ffmpeg`, `ffprobe`, `ls`, `mkdir`, the pinned `npx --yes hyperframes@…`, and the single command of the configured `TTS_PROVIDER` and `ALIGN_PROVIDER` (for example `mmx`, `edge-tts`, `mlx_audio.stt.generate`; `funasr` maps to `python3`). Installers (`brew`, `pip`, `uv`, `npm`) are not allowed, so install those tools yourself first. Enforcement differs per tool: claude and codebuddy use `acceptEdits` plus a `--settings` allowlist with `.env` reads denied (Claude Code's `acceptEdits` also auto-approves filesystem commands such as `touch`, `mkdir`, and `rm` inside the workspace); qoder uses `accept_edits` plus one `--allowed-tools` per command; codex has no command allowlist and relies on its `workspace-write` sandbox, with sandbox networking enabled for TTS; opencode has no working allowlist mechanism and can run any command even in safe mode. The codebuddy arguments have not been fully tested.
+
+`am run` prints a readable digest of the orchestrator's event stream: the session id first, assistant text as-is, one line per tool call, failed tool results marked with `✗`, and token usage at the end.
+
 ## Multi-role narration
 
 In a project created with `am init --narration cast`, the presence of `cast.yaml` (the project's roster) and the `cast/` directory is itself the mode switch: an older project without them behaves exactly as before.

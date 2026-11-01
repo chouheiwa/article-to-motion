@@ -89,34 +89,116 @@ func RendererInvocation(tool, prompt string, unsafe bool, access RendererAccess)
 	}
 }
 
-func OrchestratorInvocation(tool, workdir, prompt string, unsafe bool) ([]string, string, error) {
+// OrchestratorAccess 是安全模式下编排工具要放行的 Bash 命令前缀。
+//
+// 编排工具要跑 am 子命令、ffmpeg、TTS 与对齐 CLI，而各家「只批准文件编辑」的权限模式
+// 一律拦下 Bash（claude 的 acceptEdits、qoder 的 accept_edits），dont_ask 更是连写文件
+// 都拒——实测安全模式下整片制作因此一步都走不动。清单由调用方按项目配置算出，
+// 见 project.OrchestratorAccess。
+type OrchestratorAccess struct {
+	Commands []string
+}
+
+// OrchestratorOptions 是一次编排调用的全部输入。
+type OrchestratorOptions struct {
+	Workdir string
+	Prompt  string
+	Unsafe  bool
+	// SessionID 非空且 Resume 为 false 时，表示让工具用这个 id 开新会话（只有
+	// PresetSessionID 为 true 的工具支持）；Resume 为 true 时表示续接这个会话。
+	SessionID string
+	Resume    bool
+	Access    OrchestratorAccess
+}
+
+// PresetSessionID 报告该工具能否由调用方预先指定新会话的 id。
+// codex 与 opencode 不能，它们的 id 要从输出流的第一条事件里读。
+func PresetSessionID(tool string) bool {
+	return tool == "claude" || tool == "qoder" || tool == "codebuddy"
+}
+
+// OrchestratorInvocation 返回编排调用的命令行与要写进 stdin 的内容。
+//
+// 所有工具都输出结构化流（stream-json / JSONL），由 internal/agentrun 解析。
+// 调用方负责把进程的工作目录设为 o.Workdir：opencode 2.x 的 run 已经没有 --dir。
+func OrchestratorInvocation(tool string, o OrchestratorOptions) ([]string, string, error) {
+	if o.Resume && o.SessionID == "" {
+		return nil, "", fmt.Errorf("续接会话需要 session id")
+	}
+	if o.SessionID != "" && !o.Resume && !PresetSessionID(tool) {
+		return nil, "", fmt.Errorf("%s 不支持预先指定会话 id", tool)
+	}
+	claudeSession := func() []string {
+		switch {
+		case o.Resume:
+			return []string{"--resume", o.SessionID}
+		case o.SessionID != "":
+			return []string{"--session-id", o.SessionID}
+		}
+		return nil
+	}
 	switch tool {
 	case "codex":
-		if unsafe {
-			return []string{"codex", "exec", "--skip-git-repo-check", "--cd", workdir, "--dangerously-bypass-approvals-and-sandbox", "-"}, prompt, nil
+		args := []string{"codex"}
+		if o.Unsafe {
+			args = append(args, "exec", "--skip-git-repo-check", "--cd", o.Workdir, "--dangerously-bypass-approvals-and-sandbox")
+		} else {
+			// workspace-write 沙箱默认断网，TTS 要连外网；codex 没有命令白名单，靠沙箱限制写入范围。
+			args = append(args, "--ask-for-approval", "never", "-c", "sandbox_workspace_write.network_access=true",
+				"exec", "--skip-git-repo-check", "--cd", o.Workdir, "--sandbox", "workspace-write")
 		}
-		return []string{"codex", "--ask-for-approval", "never", "exec", "--skip-git-repo-check", "--cd", workdir, "--sandbox", "workspace-write", "-"}, prompt, nil
-	case "claude":
-		if unsafe {
-			return []string{"claude", "-p", prompt, "--dangerously-skip-permissions"}, "", nil
+		args = append(args, "--json")
+		if o.Resume {
+			args = append(args, "resume", o.SessionID)
 		}
-		return []string{"claude", "-p", prompt, "--permission-mode", "acceptEdits"}, "", nil
+		return append(args, "-"), o.Prompt, nil
+	case "claude", "codebuddy":
+		args := []string{tool, "-p", "--verbose", "--output-format", "stream-json"}
+		if tool == "claude" {
+			args = append(args, "--prompt-suggestions", "false")
+		}
+		switch {
+		case o.Unsafe && tool == "claude":
+			args = append(args, "--dangerously-skip-permissions")
+		case o.Unsafe:
+			args = append(args, "-y")
+		default:
+			settings, err := RendererAccess{Commands: o.Access.Commands}.claudeSettings()
+			if err != nil {
+				return nil, "", err
+			}
+			args = append(args, "--permission-mode", "acceptEdits", "--settings", settings)
+		}
+		args = append(args, claudeSession()...)
+		return append(args, o.Prompt), "", nil
 	case "qoder":
-		if unsafe {
-			return []string{"qoderclicn", "-p", prompt, "--dangerously-skip-permissions", "--output-format", "stream-json"}, "", nil
+		args := []string{"qoderclicn", "-p", o.Prompt, "--output-format", "stream-json"}
+		if o.Unsafe {
+			args = append(args, "--dangerously-skip-permissions")
+		} else {
+			args = append(args, "--permission-mode", "accept_edits")
+			for _, command := range o.Access.Commands {
+				args = append(args, "--allowed-tools", "Bash("+command+":*)")
+			}
 		}
-		return []string{"qoderclicn", "-p", prompt, "--permission-mode", "dont_ask", "--output-format", "stream-json"}, "", nil
-	case "codebuddy":
-		if unsafe {
-			return []string{"codebuddy", "-p", prompt, "-y"}, "", nil
+		switch {
+		case o.Resume:
+			args = append(args, "-r", o.SessionID)
+		case o.SessionID != "":
+			args = append(args, "--session-id", o.SessionID)
 		}
-		return []string{"codebuddy", "-p", prompt, "--permission-mode", "acceptEdits"}, "", nil
+		return args, "", nil
 	case "opencode":
-		args := []string{"opencode", "run", "--dir", workdir}
-		if unsafe {
+		// opencode 只认项目目录里的 opencode.json，规则集写法实测拦不住命令，
+		// 全拒时无头运行直接挂起；安全模式下因此不加限制，见 README。
+		args := []string{"opencode", "run", "--format", "json"}
+		if o.Unsafe {
 			args = append(args, "--auto")
 		}
-		return append(args, prompt), "", nil
+		if o.Resume {
+			args = append(args, "-s", o.SessionID)
+		}
+		return append(args, o.Prompt), "", nil
 	default:
 		return nil, "", fmt.Errorf("未知工具：%s", tool)
 	}

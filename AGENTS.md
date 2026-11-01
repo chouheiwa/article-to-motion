@@ -196,12 +196,14 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 
 ## 新增一个 AI CLI
 
-工具矩阵散落在四个文件，加一个工具必须五处同步改，漏一处会在运行期才炸：
+工具矩阵散落在五个文件，加一个工具必须七处同步改，漏一处会在运行期才炸：
 
 | 位置 | 作用 |
 |---|---|
 | `internal/tools/tools.go` `RendererInvocation` | 单镜头渲染的命令行与非交互权限模式；该模式若拦截 Bash，要把 `RendererAccess` 译成该工具的放行配置（claude 用 `--settings`） |
-| `internal/tools/tools.go` `OrchestratorInvocation` | 编排调用的命令行与 prompt 传递方式（stdin 还是参数） |
+| `internal/tools/tools.go` `OrchestratorInvocation` | 编排调用的命令行、prompt 传递方式（stdin 还是参数）、结构化输出参数、会话参数（新会话 / 续接），以及把 `OrchestratorAccess` 译成该工具的白名单 |
+| `internal/tools/tools.go` `PresetSessionID` | 该工具能否由调用方预先指定新会话 id；不能的（codex、opencode）要从输出流的第一条事件里读 |
+| `internal/agentrun/parse.go` | 把该工具的结构化流译成统一事件；先录一份真实的两轮输出放进 `testdata/`，`TestRecordedStreams` 加一行 |
 | `internal/config/config.go` `validTools` | `ORCHESTRATOR` / `RENDERER` 取值校验 |
 | `internal/scene/scene.go` `validRenderer` | `scene.json` 的 `renderer` 字段校验 |
 | `internal/scene/skills.go` `rendererSkillDirs` | 该工具的技能目录约定（家目录级与项目级） |
@@ -210,13 +212,23 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 
 安全模式的权限模式必须实测能跑通渲染命令。claude 的 `acceptEdits` 只自动批准文件编辑、拦下所有 Bash，而 `-p` 下没人批准，渲染器会执行不了 `npx hyperframes render`；`scene.RendererAccess` 列出要放行的最小命令集（带固定版本的 hyperframes、`ls`、`ffprobe`）与技能目录读取，`.env` 始终禁读。
 
+编排工具同理，`config.Config.OrchestratorAccess` 列出它要放行的命令：基础命令加当前 TTS 与对齐工具各自的那一个命令（`providers.go` 的 `Command` 字段）。各家的权限模式实测结果不同，改之前先读 `OrchestratorInvocation` 的注释：qoder 的 `dont_ask` 连写文件都拒；codex 没有命令白名单，靠沙箱，而沙箱默认断网会让 TTS 失败；opencode 2.x 只读项目目录里的 `opencode.json`，规则集拦不住命令，写成全拒时无头运行会直接挂起，所以安全模式下不加限制，README 里写明了。
+
+改了任何一家的调用参数或解析器，都要在本机跑一遍真实 CLI 集成测试：
+
+```bash
+AM_TEST_AGENT_TOOLS=claude,codex,qoder,codebuddy,opencode go test ./internal/agentrun -run RealCLI -v
+```
+
+它对每家跑两轮，第二轮续接后要答出第一轮让它记住的词。每次都是真实模型调用，CI 不跑。
+
 ## 新增一个 TTS 或对齐工具
 
 配音与对齐由编排工具按提示词执行，`am` 只登记取值并做与工具无关的校验。取值表在 `internal/config/providers.go`（`TTSProviders` / `Aligners`），校验与 `am config get` 的帮助都从它派生。加一个工具要同步：
 
 | 位置 | 作用 |
 |---|---|
-| `internal/config/providers.go` | 取值、名称、自带时间戳粒度 |
+| `internal/config/providers.go` | 取值、名称、自带时间戳粒度、命令名（安全模式下编排工具只被放行这一个命令） |
 | `internal/preset/gen/templates/PROMPT-PRODUCTION.md` 第三、四阶段 | 安装、登录、合成与取时间戳的具体命令，改完跑 `go generate` |
 | `assets/shared/article-to-motion.conf`、`.env.example`、两份 README | 可选值注释 |
 

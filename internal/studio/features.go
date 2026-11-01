@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chouheiwa/articale-to-motion/internal/agentrun"
 	"github.com/chouheiwa/articale-to-motion/internal/config"
 	"github.com/chouheiwa/articale-to-motion/internal/envutil"
 	"github.com/chouheiwa/articale-to-motion/internal/tools"
@@ -1158,24 +1159,20 @@ func (s *Server) runAIChat(ctx context.Context, conversationID, toolName, sceneI
 		return err
 	}
 	contextText := fmt.Sprintf("你正在 ArticleToMotion Studio 中协助用户。项目标识是 %s。当前镜头是 %s。用户请求：%s。选中帧：%v。选中区域：%v。请只解释问题并提出结构化、可确认的修改建议，不要直接修改文件。", p.ID, sceneID, message, atFrame, region)
-	argv, stdin, err := tools.OrchestratorInvocation(toolName, p.Path, contextText, false)
-	if err != nil {
-		return err
-	}
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Dir = p.Path
 	projectConfig, configErr := config.Load(p.Path, nil)
 	if configErr != nil {
 		return configErr
 	}
-	cmd.Env = envutil.EnvList(projectConfig.ChildEnvironment(envutil.EnvMap(), false, nil))
-	if stdin != "" {
-		cmd.Stdin = strings.NewReader(stdin)
-	}
+	// 原始流整段保留：下面仍按旧约定从里面抽 [[AM_OPERATION]] 与 [[USER_MESSAGE]]。
 	var output bytes.Buffer
-	cmd.Stdout = &output
-	cmd.Stderr = &output
-	err = cmd.Run()
+	environment := projectConfig.ChildEnvironment(envutil.EnvMap(), false, nil)
+	_, err = agentrun.Run(ctx, agentrun.Spec{
+		Tool: toolName, Workdir: p.Path, Prompt: contextText,
+		Access:   projectConfig.OrchestratorAccess(),
+		Env:      envutil.EnvList(environment),
+		LookPath: func(name string) (string, error) { return envutil.LookPath(name, environment["PATH"]) },
+		Raw:      &output,
+	}, func(agentrun.Event) {})
 	if err != nil {
 		return fmt.Errorf("AI CLI 执行失败：%w", err)
 	}

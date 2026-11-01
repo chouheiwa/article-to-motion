@@ -9,7 +9,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	assets "github.com/chouheiwa/articale-to-motion"
+	"github.com/chouheiwa/articale-to-motion/internal/agentrun"
 	"github.com/chouheiwa/articale-to-motion/internal/archive"
 	"github.com/chouheiwa/articale-to-motion/internal/beat"
 	"github.com/chouheiwa/articale-to-motion/internal/cast"
@@ -697,7 +697,13 @@ PROMPT 省略时读项目根的 PROMPT.md——该入口假定项目里已有定
   3. 安全模式下按白名单构造子进程环境；额外变量用 AM_PASSTHROUGH_ENV 列出。
 
 启动后先打印一段以 --- 结尾的头部（编排工具、渲染工具、Prompt 路径、项目规则路径），
-其后全部是编排工具自身的输出。编排工具失败时透传它的退出码。`,
+其后是编排工具的输出：它的结构化事件流被整理成可读文字——正文原样打印，每次工具
+调用一行摘要，失败的工具结果与用量单独标出，开头打印会话 id。编排工具失败时透传它的退出码。
+
+安全模式下编排工具只被放行文件编辑和一组命令：am、ffmpeg、ffprobe、ls、mkdir、
+固定版本的 hyperframes，以及 TTS_PROVIDER 与 ALIGN_PROVIDER 各自的那一个命令；
+安装命令不在其中，要先自己装好。codex 改由沙箱限制写入范围（放开网络），
+opencode 没有可用的白名单机制，安全模式下仍能执行任何命令。`,
 		Example: `  # 项目已有定稿 transcription.srt
   am run
 
@@ -719,26 +725,13 @@ PROMPT 省略时读项目根的 PROMPT.md——该入口假定项目里已有定
 				workdir = rootDir
 			}
 			workdir, _ = filepath.Abs(workdir)
-			promptPath := filepath.Join(rootDir, "PROMPT.md")
-			if song.Enabled(rootDir) {
-				if _, err := song.LoadConfig(rootDir); err != nil {
-					return err
-				}
-				promptPath = filepath.Join(rootDir, "PROMPT-SONG.md")
-			}
+			override := ""
 			if len(args) == 1 {
-				promptPath, _ = filepath.Abs(args[0])
+				override = args[0]
 			}
-			prompt, err := os.ReadFile(promptPath)
+			prompt, promptPath, err := project.RunPrompt(rootDir, override)
 			if err != nil {
-				return fmt.Errorf("找不到 prompt 文件：%s", promptPath)
-			}
-			if song.Enabled(rootDir) {
-				contract, err := assets.Files.ReadFile("assets/shared/PROMPT-SONG.md")
-				if err != nil {
-					return err
-				}
-				prompt = append(prompt, append([]byte("\n\n歌曲模式必要契约（优先于口播规程）：\n"), contract...)...)
+				return err
 			}
 			rulesName, err := tools.ProjectRulesFilename(cfg.Orchestrator)
 			if err != nil {
@@ -749,29 +742,24 @@ PROMPT 省略时读项目根的 PROMPT.md——该入口假定项目里已有定
 				return err
 			}
 			isUnsafe := envutil.IsUnsafe(unsafe)
-			argv, stdin, err := tools.OrchestratorInvocation(cfg.Orchestrator, workdir, string(prompt), isUnsafe)
-			if err != nil {
-				return err
-			}
-			binary, err := exec.LookPath(argv[0])
-			if err != nil {
-				return fmt.Errorf("缺少必需工具：%s", argv[0])
-			}
-			process := exec.Command(binary, argv[1:]...)
-			process.Dir, process.Stdout, process.Stderr = workdir, stdout, stderr
 			childEnvironment := cfg.ChildEnvironment(currentEnvironment(), isUnsafe, envutil.ParsePassthrough(os.Getenv("AM_PASSTHROUGH_ENV")))
 			addExecutableLocation(childEnvironment)
-			process.Env = envList(childEnvironment)
-			if stdin != "" {
-				process.Stdin = strings.NewReader(stdin)
-			}
 			if rulesPath == "" {
 				fmt.Fprintf(stderr, "警告：项目缺少 %s，本次不下发项目规则；可运行 am init 补齐\n", project.RulesTemplate)
 			}
 			fmt.Fprintf(stdout, "编排工具: %s\n渲染工具: %s\nPrompt: %s\n项目规则: %s\n---\n", cfg.Orchestrator, cfg.Renderer, promptPath, rulesDisplay(rulesPath))
-			if err := runProcessGroup(cmd.Context(), process); err != nil {
-				if exit, ok := err.(*exec.ExitError); ok {
-					return &exitError{code: exit.ExitCode(), message: "编排工具执行失败"}
+			printer := &eventPrinter{stdout: stdout, stderr: stderr}
+			_, err = agentrun.Run(cmd.Context(), agentrun.Spec{
+				Tool: cfg.Orchestrator, Workdir: workdir, Prompt: string(prompt), Unsafe: isUnsafe,
+				SessionID: agentrun.NewSessionID(cfg.Orchestrator),
+				Access:    cfg.OrchestratorAccess(hyperframesCommand()),
+				Env:       envList(childEnvironment),
+				LookPath:  func(name string) (string, error) { return envutil.LookPath(name, childEnvironment["PATH"]) },
+			}, printer.print)
+			if err != nil {
+				var exit *agentrun.ExitError
+				if errors.As(err, &exit) {
+					return &exitError{code: exit.Code, message: "编排工具执行失败"}
 				}
 				return err
 			}
