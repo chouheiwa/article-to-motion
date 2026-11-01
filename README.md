@@ -68,7 +68,7 @@ AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm test
 
 `am init` 仍接受旧版 `--style` 参数以兼容已有脚本，但它不再构成视觉要求。
 
-`am init` 不覆盖内容不同的已有文件。默认联网安装固定版本 0.8.14 的 HyperFrames 官方技能到项目的 `.agents/skills/`，与随二进制下发的 `text-to-lottie`、`algorithmic-art` 同处一个目录；安装依赖 `git`，离线或 CI 环境可使用 `--skip-hyperframes`。
+`am init` 不覆盖内容不同的已有文件。默认联网安装固定版本 0.8.225 的 HyperFrames 官方技能到项目的 `.agents/skills/`，与随二进制下发的 `text-to-lottie`、`algorithmic-art` 同处一个目录；安装依赖 `git`，离线或 CI 环境可使用 `--skip-hyperframes`。
 
 技能装进项目而不是 HOME，是因为项目之间互不覆盖只有这样才成立：上游安装器只认 `homedir`，一台机器上只有一份技能，项目 A 与项目 B 固定不同版本时谁后初始化谁说了算。安装全程不写用户 HOME——上游安装器在项目外的临时目录里运行，产物再搬进项目。
 

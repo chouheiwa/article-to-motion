@@ -468,9 +468,13 @@ func validateStyleSchema(tokens map[string]any) (preset.Preset, error) {
 	return active, nil
 }
 
-// autoEmbeddedFonts 是 HyperFrames 0.8.14 会自动下载并内联的字体族
+// autoEmbeddedFonts 是 HyperFrames 0.8.225 会自动内联的字体族
 // （CANONICAL_FONTS，背后是 @fontsource/* 包）。清单里没有任何简体中文字体：
 // 唯一的 CJK 项 Noto Sans JP 缺失大量简体字，不能当替代品。
+//
+// 0.8.185 之后编译器对清单外的字体族多了两条兜底：渲染时向 Google Fonts 现取，
+// 取不到再从本机字体目录抓取内联。两条都让结果取决于网络或渲染那台机器，
+// 所以这里仍只认清单与项目里显式声明的字体，不把兜底当作「会自动内联」。
 var autoEmbeddedFonts = map[string]bool{
 	"archivo black": true, "eb garamond": true, "ibm plex mono": true, "inter": true,
 	"jetbrains mono": true, "lato": true, "league gothic": true, "montserrat": true,

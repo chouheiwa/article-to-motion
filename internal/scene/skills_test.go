@@ -8,32 +8,28 @@ import (
 	"testing"
 )
 
-// installSkill 在 dir 下伪造一份完整的 hyperframes-animation 技能安装。
-func installSkill(t *testing.T, dir string) string {
-	t.Helper()
-	skill := filepath.Join(dir, AnimationSkillName)
-	if err := os.MkdirAll(skill, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"SKILL.md", rulesIndexFile} {
-		if err := os.WriteFile(filepath.Join(skill, name), []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
+// hyperFramesDescriptor 取入口技能的注册项。
+func hyperFramesDescriptor() SkillDescriptor {
+	for _, desc := range RegisteredSkills {
+		if desc.Name == HyperFramesSkillName {
+			return desc
 		}
 	}
-	return dir
+	panic("入口技能不在注册表里")
+}
+
+// installSkill 在 dir 下伪造一份完整的 hyperframes 入口技能安装。
+func installSkill(t *testing.T, dir string) string {
+	t.Helper()
+	return installNamedSkill(t, dir, hyperFramesDescriptor())
 }
 
 // resolveAnimationSkill 是这组测试的入口。
 //
-// 测的是 ResolveSkill 的目录解析逻辑，用动效技能作为样本——它是唯一同时要求
-// SKILL.md 和 rules-index.md 两个文件的技能，覆盖面最广。
+// 测的是 ResolveSkill 的目录解析逻辑，用入口技能作为样本——它是唯一要求
+// SKILL.md 之外还有子目录文件（references/*.md）的技能，覆盖面最广。
 func resolveAnimationSkill(renderer, sceneDir string, environ map[string]string) (string, error) {
-	for _, desc := range RegisteredSkills {
-		if desc.Name == AnimationSkillName {
-			return ResolveSkill(renderer, sceneDir, environ, desc)
-		}
-	}
-	panic("动效技能不在注册表里")
+	return ResolveSkill(renderer, sceneDir, environ, hyperFramesDescriptor())
 }
 
 func TestResolveAnimationSkillPrefersExplicitEnvironment(t *testing.T) {
@@ -157,8 +153,9 @@ func TestResolveAnimationSkillPrefersRendererDirWhenProjectSitsInsideHome(t *tes
 
 func TestResolveAnimationSkillIgnoresIncompleteInstall(t *testing.T) {
 	home := t.TempDir()
-	// 只有 SKILL.md 没有 rules-index.md：提示词引用的文件不存在，必须当作未找到。
-	partial := filepath.Join(home, ".claude", "skills", AnimationSkillName)
+	// 只有 SKILL.md 没有 references/：提示词引用的文件不存在，必须当作未找到。
+	// 用 0.8.14 装出来的旧项目正是这个形状——那时入口技能还只是一页路由说明。
+	partial := filepath.Join(home, ".claude", "skills", HyperFramesSkillName)
 	if err := os.MkdirAll(partial, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -226,14 +223,14 @@ func TestBuildPromptEmbedsResolvedSkillPath(t *testing.T) {
 	}
 	skills := installSkill(t, filepath.Join(t.TempDir(), "skills"))
 
-	prompt, err := BuildPrompt(s, map[string]string{AnimationSkillName: skills})
+	prompt, err := BuildPrompt(s, map[string]string{HyperFramesSkillName: skills})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		filepath.Join(skills, AnimationSkillName),
-		rulesIndexFile,
-		blueprintsIndexFile,
+		filepath.Join(skills, HyperFramesSkillName),
+		hyperFramesFormatFile,
+		hyperFramesMotionFile,
 		"动效要求（强制）",
 		"decorative",
 		// 数量配额会让渲染器为了达标堆砌与文案无关的动效，改为要求每个动效说得出理由。
@@ -260,8 +257,8 @@ func TestBuildPromptFallsBackToSkillNameWithoutPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(prompt, AnimationSkillName) || !strings.Contains(prompt, rulesIndexFile) {
-		t.Fatalf("fallback prompt must still name the skill and its index: %s", prompt)
+	if !strings.Contains(prompt, HyperFramesSkillName) || !strings.Contains(prompt, hyperFramesFormatFile) {
+		t.Fatalf("fallback prompt must still name the skill and its contract file: %s", prompt)
 	}
 	if strings.Contains(prompt, "本机该技能目录为") {
 		t.Fatal("fallback prompt must not claim a machine-local path")
@@ -276,6 +273,9 @@ func installNamedSkill(t *testing.T, dir string, desc SkillDescriptor) string {
 		t.Fatal(err)
 	}
 	for _, name := range desc.RequiredFiles {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(skill, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(filepath.Join(skill, name), []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -413,7 +413,9 @@ func TestBuildPromptDegradesToSkillNamesWhenNothingInstalled(t *testing.T) {
 func TestHyperFramesCLIPromptForbidsRemoteAndSkillMutatingCommands(t *testing.T) {
 	for _, dir := range []string{"", "/proj/.agents/skills"} {
 		section := hyperFramesCLIPrompt(dir)
-		for _, forbidden := range []string{"cloud", "lambda", "publish", "skills", "upgrade"} {
+		for _, forbidden := range []string{"cloud", "lambda", "publish", "skills", "upgrade",
+			// 0.8.185 起 CLI 技能把这些交互、桌面应用与遥测命令列进了标准流程。
+			"preview", "open", "catch-up", "history", "feedback", "usage"} {
 			if !strings.Contains(section, forbidden) {
 				t.Errorf("skillsDir=%q 时，CLI 提示词没有点名禁止的命令 %q：\n%s", dir, forbidden, section)
 			}
@@ -424,16 +426,24 @@ func TestHyperFramesCLIPromptForbidsRemoteAndSkillMutatingCommands(t *testing.T)
 	}
 }
 
-// TestHyperFramesCorePromptRefusesWholeVideoPlanning：上游 core 技能同时覆盖
-// 建子项目与 STORYBOARD.md / SCRIPT.md 计划格式，那是整片工作流的东西。
-// 分镜由上层决定并已写进 scene.json，渲染器照那套走会产出计划文件并试图自己
-// 排布多镜头，直接违反单镜头契约。
-func TestHyperFramesCorePromptRefusesWholeVideoPlanning(t *testing.T) {
+// TestHyperFramesPromptNarrowsTheEntrySkillToOneScene 守着入口技能的收窄范围。
+//
+// 0.8.185 起组合契约与动效手法都并进了入口技能 hyperframes，而它的本职是整片
+// 制作：故事线、SPEC.md、分镜、配乐、预览审批与 REVIEW.md。分镜由上层决定并已
+// 写进 scene.json，渲染器照那套走会产出计划文件、给镜头配乐，还会停下来等人审批。
+// look.md 要求把项目根 frame.md 当配色规范，与「视觉自由度」冲突；format.md 允许
+// local() 引用本机字体，换机器结果就不同。这几条禁令只存在于我们的提示词里。
+func TestHyperFramesPromptNarrowsTheEntrySkillToOneScene(t *testing.T) {
 	for _, dir := range []string{"", "/proj/.agents/skills"} {
-		section := hyperFramesCorePrompt(dir)
-		for _, want := range []string{"STORYBOARD", "SCRIPT", "子项目", "一个 composition"} {
+		section := hyperFramesPrompt(dir)
+		for _, want := range []string{
+			"STORYBOARD", "SCRIPT", "SPEC.md", "REVIEW.md", "子项目", "一个 composition",
+			"story.md", "sound.md", "captions.md", "<audio>",
+			"frame.md", "视觉自由度", "Video facts", "frame-presets",
+			"local()", "1920×1080", "catalog", "media-use",
+		} {
 			if !strings.Contains(section, want) {
-				t.Errorf("skillsDir=%q 时，core 提示词缺少 %q：\n%s", dir, want, section)
+				t.Errorf("skillsDir=%q 时，入口技能提示词缺少 %q：\n%s", dir, want, section)
 			}
 		}
 	}
@@ -460,9 +470,9 @@ func TestUpstreamSkillPromptsDegradeGracefully(t *testing.T) {
 // argv 才稳定可比。
 func TestRendererAccessPinsCLIAndOpensSkillDirs(t *testing.T) {
 	access := RendererAccess(map[string]string{
-		AnimationSkillName:       "/proj/.agents/skills",
-		HyperFramesCoreSkillName: "/proj/.agents/skills",
-		CharacterRigSkillName:    "/home/.claude/skills",
+		HyperFramesSkillName:    "/proj/.agents/skills",
+		HyperFramesCLISkillName: "/proj/.agents/skills",
+		CharacterRigSkillName:   "/home/.claude/skills",
 	})
 	if access.Commands[0] != "npx --yes hyperframes@"+hyperframes.PinnedVersion {
 		t.Errorf("第一条放行命令应是带固定版本的 hyperframes，实际 %q", access.Commands[0])
@@ -495,7 +505,7 @@ func TestSceneKitPromptMakesCaptionsAndLayoutMandatory(t *testing.T) {
 // 只盯入场的动画常常落在一个说不清台词论点的终态上；跟随关系不成立（指针没落
 // 在控件上、标签与对象脱节）则是画面自查最容易漏的错。
 func TestAnimationPromptDirectsEndStatesAndFollowRelations(t *testing.T) {
-	section := animationPrompt("")
+	section := hyperFramesPrompt("")
 	for _, want := range []string{"状态变化", "最终停在什么状态", "论点", "跟随关系", "指针落在它要按的控件上", "标签跟着它标注的对象走"} {
 		if !strings.Contains(section, want) {
 			t.Errorf("动效片段缺少 %q：\n%s", want, section)

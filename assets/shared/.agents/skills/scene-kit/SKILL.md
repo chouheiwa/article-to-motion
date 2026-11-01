@@ -114,7 +114,7 @@ subs.layouts;         // 每条字幕的排版结果：{cue, fontSize, lines, ov
 
 `attach(timeline, render)` 把 `render(帧号)` 挂到一条 `gsap.timeline({ paused: true })` 上，立即出一次第 0 帧，返回一个无参 `draw()`（按时间线当前位置补出一帧）。帧号取 `Math.round(timeline.time() × fps)`，钳在 `[0, frames - 1]`。
 
-只靠 `onUpdate` 不够：GSAP 的 `tl.seek(t)` 默认 `suppressEvents=true`，`onUpdate` 一次都不触发；宿主走 `window.__hf.seek` 时子时间线自己的 `seek` 也不会被调用。所以 `attach` 做三层（与上游 `hyperframes-animation/examples/messaging-multi-phrase.html` 和本项目 `character-rig` 的 `cast.js` 同一做法）：
+只靠 `onUpdate` 不够：GSAP 的 `tl.seek(t)` 默认 `suppressEvents=true`，`onUpdate` 一次都不触发；宿主走 `window.__hf.seek` 时子时间线自己的 `seek` 也不会被调用。所以 `attach` 做三层（与 HyperFrames 0.8.14 的上游示例 `hyperframes-animation/examples/messaging-multi-phrase.html` 和本项目 `character-rig` 的 `cast.js` 同一做法）：
 
 1. 一条覆盖整镜的驱动 tween，`onUpdate` 里出帧；
 2. 时间线自己的 `seek` / `pause` 包一层，调用后补出一帧；

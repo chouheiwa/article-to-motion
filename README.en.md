@@ -68,7 +68,7 @@ The project no longer presets or locks a visual style. Canvas, frame rate, and d
 
 The legacy `--style` flag is still accepted for old scripts, but it no longer imposes a visual requirement.
 
-`am init` refuses to overwrite existing files with different content. By default it installs the pinned HyperFrames 0.8.14 skills into the project's `.agents/skills/`, alongside the binary-delivered `text-to-lottie` and `algorithmic-art`; use `--skip-hyperframes` for offline or CI environments.
+`am init` refuses to overwrite existing files with different content. By default it installs the pinned HyperFrames 0.8.225 skills into the project's `.agents/skills/`, alongside the binary-delivered `text-to-lottie` and `algorithmic-art`; use `--skip-hyperframes` for offline or CI environments.
 
 Skills go into the project rather than `$HOME` because that is the only way projects stop clobbering each other: the upstream installer only honours `homedir`, so a machine has exactly one copy — with two projects pinned to different versions, whichever was initialized last wins. The install never writes to your HOME; the upstream installer runs in a temporary directory outside the project and its output is moved in.
 

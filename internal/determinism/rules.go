@@ -28,7 +28,8 @@ type Rule struct {
 
 // scriptRules 作用于脚本正文（内联 <script> 与本地 JS 文件，注释已剥除）。
 //
-// 每条都对应 hyperframes-core 的 determinism-rules.md 里一条禁令，且都是
+// 每条都对应上游 hyperframes 技能 Contract 第 4 条与 runtimes.md 里的禁令（0.8.14 时在
+// hyperframes-core 的 determinism-rules.md），且都是
 // HyperFrames 自己的 lint 不查的：lint 查 repeat 取整溢出，不查无限 repeat；
 // 时钟、随机数、定时器与运行时网络请求它一条都不看。
 //

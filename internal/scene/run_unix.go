@@ -45,8 +45,8 @@ func Run(ctx context.Context, s Scene, cfg config.Config, unsafe bool, baseEnv m
 	if err != nil {
 		return err
 	}
-	if resolvedSkills[AnimationSkillName] == "" {
-		fmt.Fprintf(userOutput, "警告：未能为渲染工具 %s 定位 %s 技能目录，动效要求改用技能名兜底；可运行 am init 安装，或用 %s 显式指定\n", renderer, AnimationSkillName, SkillsDirEnv)
+	if resolvedSkills[HyperFramesSkillName] == "" {
+		fmt.Fprintf(userOutput, "警告：未能为渲染工具 %s 定位 %s 技能目录，组合规范与动效要求改用技能名兜底；可运行 am init 安装，或用 %s 显式指定\n", renderer, HyperFramesSkillName, SkillsDirEnv)
 	}
 	prompt, err := BuildPrompt(s, resolvedSkills)
 	if err != nil {

@@ -31,7 +31,7 @@ go vet ./...
 
 `assets/shared/.agents/skills/<name>/` 是随 `am init` 下发到用户项目根 `.agents/skills/` 的技能树。`scene.ResolveSkill` 从镜头目录逐级向上找 `.agents/skills`，落到项目根就能被发现，用户无需另行安装。
 
-`hyperframes-animation` 等官方技能不在这棵树里，但**落点相同**：`am init` 通过 `internal/hyperframes` 把它们按固定版本装进同一个 `.agents/skills/`。这棵源树只放本仓库自带的技能。
+`hyperframes`、`hyperframes-cli` 等官方技能不在这棵树里，但**落点相同**：`am init` 通过 `internal/hyperframes` 把它们按固定版本装进同一个 `.agents/skills/`。这棵源树只放本仓库自带的技能。
 
 官方技能不能直接跑 `npx hyperframes skills` 装——上游安装器只认 `homedir()`，没有任何选项能改落点（`skills update --dir` 的帮助原文写着 "scopes the prune, not the install"）。装在机器级会让项目之间互相覆盖：一台机器只有一份技能，项目 A 与项目 B 固定不同版本时谁后初始化谁说了算。
 
@@ -70,11 +70,10 @@ go vet ./...
 
 注册上游技能时要收窄范围，上游技能的职责范围通常比单镜头渲染大得多：
 
-- `hyperframes-core` 同时覆盖建子项目与 `STORYBOARD.md` / `SCRIPT.md` 计划格式，那是整片工作流。分镜由上层决定并已写进 `scene.json`，不收窄的话渲染器会产出计划文件并试图自己排布多镜头。
-- `hyperframes-creative` 同时覆盖选色板、选字体、`design-picker` 与整片旁白/节拍规划。本项目配色与字体由 `frame.md` 锁定，只让渲染器读构图与密度（`house-style.md`、`video-composition.md`）和写完后的对照清单（`design-adherence.md`）。
-- `hyperframes-cli` 覆盖 `cloud` / `cloudrun` / `lambda` / `publish` 远端渲染路径，以及 `skills` / `upgrade` 这类改动已装技能的命令。前者绕开本机确定性前提，后者会顶掉固定版本、影响同项目其他镜头。
+- `hyperframes` 是入口技能，0.8.185 起上游把 `hyperframes-animation`、`hyperframes-core`、`hyperframes-creative` 并进了它，组合契约（`SKILL.md` 的 Contract、`references/format.md`）与动效手法（`references/motion.md`）都只在这里。它的本职却是整片制作：故事线三选一、`SPEC.md`、分镜、配乐音效、预览审批、桌面应用交接与 `REVIEW.md`。分镜由上层决定并已写进 `scene.json`，不收窄的话渲染器会产出计划文件、给镜头配乐（产物必须无音轨），还会停下来等人审批。另有两处与本项目正面冲突，要点名覆盖：`references/look.md` 让渲染器把项目根的 `frame.md` 当作配色与字体规范，而本项目的 `frame.md` 不是视觉命令；`references/format.md` 允许 `local()` 引用本机字体，换一台机器渲染结果就不同。
+- `hyperframes-cli` 覆盖 `cloud` / `cloudrun` / `lambda` / `publish` 远端渲染路径，`skills` / `upgrade` 这类改动已装技能的命令，以及 `preview` / `open` / `catch-up` / `history` / `feedback` / `usage` 这类交互、桌面应用与遥测命令。第一类绕开本机确定性前提，第二类会顶掉固定版本、影响同项目其他镜头，第三类在无头渲染里要么卡住等人，要么往外发数据。`timeline` 只放行只读的 `--json`，它的改写子命令与「时长由 `scene.json` 决定」冲突。
 
-这两条禁令只存在于我们自己写的提示词片段里，上游不会替我们守，所以 `skills_test.go` 有对应的门禁盯着。**入口技能 `hyperframes` 刻意不注册**：它的职责是「选择并安装 owning workflow」，会把渲染器往整片制作上带。
+这些禁令只存在于我们自己写的提示词片段里，上游不会替我们守，所以 `skills_test.go` 有对应的门禁盯着。`hyperframes` 的 `RequiredFiles` 包含提示词点名的 `references/*.md`：用 0.8.14 初始化的旧项目里入口技能只有一页路由说明，按缺失处理并在渲染前告警，比把渲染器指向不存在的文件强。
 
 `internal/project/skilltree_test.go` 守着这条链：注册了但没随二进制下发、下发了但镜头目录找不到、技能目录缺 `SKILL.md`，都会失败。**这些失败必须修，不能豁免**——`ResolveSkill` 按设计在找不到技能时不报错只降级，没有这道门就会一路静默到成片质量变差才被发现。
 

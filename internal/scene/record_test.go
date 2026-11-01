@@ -104,7 +104,7 @@ func TestFingerprintTracksDeclaredInputs(t *testing.T) {
 	s, _ := Load(dir)
 	skills := t.TempDir()
 	os.WriteFile(filepath.Join(skills, "SKILL.md"), []byte("v1"), 0o644)
-	resolved := map[string]string{AnimationSkillName: skills}
+	resolved := map[string]string{HyperFramesSkillName: skills}
 	base, err := Fingerprint(s, "codex", resolved)
 	if err != nil {
 		t.Fatal(err)
@@ -130,12 +130,12 @@ func TestFingerprintTracksDeclaredInputs(t *testing.T) {
 	// 挪动技能目录不算变化，改技能内容才算。
 	moved := t.TempDir()
 	os.WriteFile(filepath.Join(moved, "SKILL.md"), []byte("v1"), 0o644)
-	if relocated, _ := Fingerprint(s, "codex", map[string]string{AnimationSkillName: moved}); slices.Contains(relocated.Changed(changed), "prompt") || relocated.Fingerprint != changed.Fingerprint {
+	if relocated, _ := Fingerprint(s, "codex", map[string]string{HyperFramesSkillName: moved}); slices.Contains(relocated.Changed(changed), "prompt") || relocated.Fingerprint != changed.Fingerprint {
 		t.Fatalf("技能目录换位置不应改变指纹：%v", relocated.Changed(changed))
 	}
 	edited := t.TempDir()
 	os.WriteFile(filepath.Join(edited, "SKILL.md"), []byte("v2"), 0o644)
-	if updated, _ := Fingerprint(s, "codex", map[string]string{AnimationSkillName: edited}); !slices.Equal(updated.Changed(changed), []string{"skill:" + AnimationSkillName}) {
+	if updated, _ := Fingerprint(s, "codex", map[string]string{HyperFramesSkillName: edited}); !slices.Equal(updated.Changed(changed), []string{"skill:" + HyperFramesSkillName}) {
 		t.Fatalf("技能内容变化应单独报出：%v", updated.Changed(changed))
 	}
 }

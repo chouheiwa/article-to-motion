@@ -19,7 +19,7 @@ var ValidTools = map[string]bool{"codex": true, "claude": true, "qoder": true, "
 // Bash 一律拦下，而 -p 模式下没有人来批准——实测渲染器因此跑不了
 // `npx hyperframes render` / `snapshot`，镜头直接渲染失败。
 type RendererAccess struct {
-	// Commands 是放行的命令前缀，例如 "npx --yes hyperframes@0.8.14"。
+	// Commands 是放行的命令前缀，例如 "npx --yes hyperframes@0.8.225"。
 	Commands []string
 	// ReadDirs 是镜头目录之外需要读取的目录（技能树），绝对路径。
 	ReadDirs []string
