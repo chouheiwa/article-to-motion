@@ -77,3 +77,22 @@ test('opens a project file from the tree', async ({ page }) => {
   await page.locator('.tree-file', { hasText: 'PROMPT.md' }).click();
   await expect(page.locator('#file-content')).toContainText('整片制作提示词');
 });
+
+test('picks the orchestrator and renderer per session', async ({ page }) => {
+  await openProject(page);
+  await expect(page.locator('#agent-tool')).toHaveValue('claude');
+  await expect(page.locator('#agent-tool option[value="claude"]')).toContainText('默认');
+
+  // 新对话：选的渲染工具在建会话时带上。
+  await page.locator('#agent-renderer').selectOption('codex');
+  await page.locator('#prompt').fill('把镜头提示词改成 after');
+  await page.locator('#send').click();
+  await expect(page.locator('.turn-card')).toContainText('本轮完成');
+  const sessions = await (await page.request.get('/api/sessions')).json();
+  expect(sessions.sessions[0]).toMatchObject({ tool: 'claude', renderer: 'codex' });
+
+  // 已有会话：换编排工具从下一轮起生效，并在对话里留一条提示。
+  await page.locator('#agent-tool').selectOption('codex');
+  await expect(page.locator('#messages')).toContainText('编排工具改为 codex');
+  await expect(page.locator('#agent-tool')).toHaveValue('codex');
+});

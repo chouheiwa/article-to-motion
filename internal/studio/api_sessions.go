@@ -34,6 +34,7 @@ func (s *Server) sessionRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/commands/", s.commandAPI)
 	mux.HandleFunc("/api/files", s.filesAPI)
 	mux.HandleFunc("/api/skills", s.skillsAPI)
+	mux.HandleFunc("/api/agents", s.agentsAPI)
 	mux.HandleFunc("/preview/scenes/", s.previewAPI)
 }
 
@@ -79,9 +80,14 @@ func (s *Server) sessionsAPI(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		var req struct {
 			Title string `json:"title"`
+			agentChoice
 		}
 		if err := decodeJSON(r, &req); err != nil {
 			s.error(w, http.StatusBadRequest, "invalid_json", "请求不是合法 JSON")
+			return
+		}
+		if err := req.validate(); err != nil {
+			s.error(w, http.StatusBadRequest, "invalid_agent", err.Error())
 			return
 		}
 		cfg, err := config.Load(p.Path, nil)
@@ -93,7 +99,7 @@ func (s *Server) sessionsAPI(w http.ResponseWriter, r *http.Request) {
 		if title == "" {
 			title = "对话 " + time.Now().Format("01-02 15:04")
 		}
-		sess, err := s.createSession(p.Path, "chat", title, cfg.Orchestrator)
+		sess, err := s.createSession(p.Path, "chat", title, req.agentChoice.withDefaults(cfg))
 		if err != nil {
 			s.error(w, http.StatusInternalServerError, "session_failed", err.Error())
 			return
@@ -104,7 +110,7 @@ func (s *Server) sessionsAPI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// sessionAPI 处理 /api/sessions/{id}[/turns|/events|/cancel]。
+// sessionAPI 处理 /api/sessions/{id}[/turns|/events|/agents|/cancel]。
 func (s *Server) sessionAPI(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.projectOr404(w)
 	if !ok {
@@ -158,6 +164,8 @@ func (s *Server) sessionAPI(w http.ResponseWriter, r *http.Request) {
 		s.write(w, http.StatusAccepted, map[string]any{"turn_id": turn.ID, "session_id": sess.meta.ID})
 	case "events":
 		s.sessionEvents(w, r, sess)
+	case "agents":
+		s.switchSessionAgents(w, r, sess)
 	case "cancel":
 		if r.Method != http.MethodPost {
 			s.method(w, http.MethodPost)
@@ -228,9 +236,14 @@ func (s *Server) productionStartAPI(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Message string `json:"message"`
 		Prompt  string `json:"prompt"`
+		agentChoice
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		s.error(w, http.StatusBadRequest, "invalid_json", "请求不是合法 JSON")
+		return
+	}
+	if err := req.validate(); err != nil {
+		s.error(w, http.StatusBadRequest, "invalid_agent", err.Error())
 		return
 	}
 	override := ""
@@ -257,7 +270,7 @@ func (s *Server) productionStartAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rel, _ := filepath.Rel(p.Path, promptPath)
-	sess, err := s.createSession(p.Path, "production", "整片制作（"+filepath.ToSlash(rel)+"）", cfg.Orchestrator)
+	sess, err := s.createSession(p.Path, "production", "整片制作（"+filepath.ToSlash(rel)+"）", req.agentChoice.withDefaults(cfg))
 	if err != nil {
 		s.error(w, http.StatusInternalServerError, "session_failed", err.Error())
 		return

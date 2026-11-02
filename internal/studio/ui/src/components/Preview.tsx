@@ -16,7 +16,7 @@ const tabs: [Tab, string][] = [
 ];
 
 /** 按钮触发的写任务：返回 task_id 的接口。App 负责发请求、提示与刷新任务列表。 */
-export type RunAction = (path: string, payload?: unknown) => void;
+export type RunAction = (path: string, payload?: Record<string, unknown>) => void;
 
 interface Props {
   tab: Tab;

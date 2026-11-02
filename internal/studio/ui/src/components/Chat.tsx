@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { ApiError, errorText, post, rawURL } from '../api';
-import type { Attachment, EventKind, FileChange, SessionEvent, SessionMeta, Usage } from '../types';
+import type { AgentChoice, AgentsResponse, Attachment, EventKind, FileChange, SessionEvent, SessionMeta, Usage } from '../types';
+import { AgentPicker } from './AgentPicker';
 import { DiffDialog } from './DiffDialog';
 
 // SSE 的 event 字段就是事件种类，EventSource 只把具名事件派给对应监听器，所以要逐个注册。
@@ -22,6 +23,9 @@ const kinds: EventKind[] = [
 ];
 
 interface Props {
+  agents: AgentsResponse | null;
+  choice: AgentChoice;
+  onChoice: (choice: AgentChoice) => void;
   sessions: SessionMeta[];
   sessionId: string;
   busy: string;
@@ -67,7 +71,7 @@ export function Chat(props: Props) {
     try {
       let id = props.sessionId;
       if (!id) {
-        const created = await post<SessionMeta>('/api/sessions', { title: message.slice(0, 24) });
+        const created = await post<SessionMeta>('/api/sessions', { title: message.slice(0, 24), ...props.choice });
         id = created.session_id;
         props.onSession(id);
       }
@@ -86,7 +90,7 @@ export function Chat(props: Props) {
     setSending(true);
     setError('');
     try {
-      const result = await post<{ session_id: string }>('/api/production/start', { message: draft.trim() });
+      const result = await post<{ session_id: string }>('/api/production/start', { message: draft.trim(), ...props.choice });
       setDraft('');
       props.onSession(result.session_id);
       props.onSessionsChanged();
@@ -128,6 +132,7 @@ export function Chat(props: Props) {
           开始制作
         </button>
       </header>
+      <AgentPicker agents={props.agents} value={props.choice} disabled={running || sending} onChange={props.onChoice} />
 
       <div
         class="messages"

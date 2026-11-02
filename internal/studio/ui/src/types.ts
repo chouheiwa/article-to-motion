@@ -64,6 +64,7 @@ export interface SessionMeta {
   title: string;
   kind: 'chat' | 'production';
   tool: string;
+  renderer?: string;
   cli_session_id?: string;
   created_at: string;
   updated_at: string;
@@ -171,4 +172,25 @@ export interface BeatState {
   click: boolean;
   confirmed: boolean;
   click_path: string;
+}
+
+export interface AgentInfo {
+  id: string;
+  label: string;
+  command: string;
+  installed: boolean;
+  path?: string;
+}
+
+export interface AgentsResponse {
+  agents: AgentInfo[];
+  orchestrator: string;
+  renderer: string;
+  config_error?: string;
+}
+
+/** 一个会话用的编排工具与渲染工具。 */
+export interface AgentChoice {
+  tool: string;
+  renderer: string;
 }

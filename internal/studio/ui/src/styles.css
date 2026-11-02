@@ -491,6 +491,31 @@ pre.text {
   flex: 1;
   min-width: 0;
 }
+.agent-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.agent-picker label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 140px;
+}
+.agent-picker label span {
+  color: var(--muted);
+  flex: none;
+}
+.agent-picker select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+}
 .messages {
   flex: 1;
   min-height: 120px;

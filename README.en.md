@@ -53,6 +53,7 @@ Chat is the main entry point. Studio starts the configured orchestrator (`ORCHES
 
 - **Studio never edits project files itself.** Changes come only from an orchestrator turn or from buttons that call `am` subcommands directly (render, concat, validate, review, confirm the beat grid).
 - **Every turn can be reverted.** Studio snapshots the project before and after each turn, lists the files the turn changed, shows each file before and after, and can revert the whole turn. If any of those files changed again later, the revert is refused as a whole rather than applied partially. Media files and files over 2 MB are listed but not reverted; re-render instead.
+- **Tools per session.** The chat header picks the orchestrator and renderer for the session, defaulting to the project config; tools that are not installed cannot be picked. The choice applies to that session only and does not edit `article-to-motion.conf`. Switching the orchestrator mid-session starts a new CLI session on the next turn, seeded with the earlier transcript.
 - **One writer at a time.** While a turn runs, render and concat buttons report that the project is busy, and vice versa.
 - **Sessions survive restarts.** Sessions, events, and snapshots live under the project's `production/studio/`. If the CLI session cannot be resumed (for example it expired), Studio starts a new one seeded with the earlier transcript.
 

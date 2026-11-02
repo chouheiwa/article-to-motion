@@ -18,6 +18,7 @@ import (
 // 子进程环境按安全模式白名单构造，测试用的开关要经 AM_PASSTHROUGH_ENV 透传。
 const fakeClaude = `#!/bin/sh
 printf '%s' "$*" | tr '\n' ' ' >> "$FAKE_ARGS_LOG"; echo >> "$FAKE_ARGS_LOG"
+printf '%s\n' "$RENDERER" > "$FAKE_ARGS_LOG.renderer"
 sid=""; prev=""; resume=""
 for a in "$@"; do
   if [ "$prev" = "--session-id" ]; then sid="$a"; fi
@@ -274,7 +275,7 @@ func TestProductionStartBusyAndCancel(t *testing.T) {
 
 func TestInterruptedTurnIsMarkedOnRestart(t *testing.T) {
 	f := newSessionFixture(t)
-	sess, err := f.s.createSession(f.root, "chat", "x", "claude")
+	sess, err := f.s.createSession(f.root, "chat", "x", agentChoice{Tool: "claude", Renderer: "claude"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -379,7 +380,7 @@ func TestFilesPreviewAndSkills(t *testing.T) {
 
 func TestSessionEventsFollowStreamsNewEvents(t *testing.T) {
 	f := newSessionFixture(t)
-	sess, err := f.s.createSession(f.root, "chat", "x", "claude")
+	sess, err := f.s.createSession(f.root, "chat", "x", agentChoice{Tool: "claude", Renderer: "claude"})
 	if err != nil {
 		t.Fatal(err)
 	}

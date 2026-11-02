@@ -232,13 +232,18 @@ func (s *Server) renderAllAPI(w http.ResponseWriter, r *http.Request) {
 		s.error(w, 400, "no_scenes", "项目中没有可渲染的镜头")
 		return
 	}
+	var choice agentChoice
+	if err := decodeJSON(r, &choice); err != nil || choice.validate() != nil {
+		s.error(w, http.StatusBadRequest, "invalid_agent", "渲染工具无效")
+		return
+	}
 	t, err := s.runWriteTask(p, "scenes.render", fmt.Sprintf("渲染全部 %d 个镜头", len(scenes)), func(ctx context.Context, t *Task) error {
 		for index, scene := range scenes {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
 			s.updateTask(t.ID, "running", fmt.Sprintf("正在渲染 %s（%d/%d）", scene.ID, index+1, len(scenes)), float64(index)/float64(len(scenes)), nil)
-			if _, err := s.runStudioCLI(ctx, p, "scene", "run", scene.Directory); err != nil {
+			if _, err := s.runStudioCLIWith(ctx, p, agentChoice{Renderer: choice.Renderer}, "scene", "run", scene.Directory); err != nil {
 				return fmt.Errorf("%s：%w", scene.ID, err)
 			}
 		}
@@ -274,9 +279,14 @@ func (s *Server) sceneFeatureAPI(w http.ResponseWriter, r *http.Request) {
 				s.method(w, http.MethodPost)
 				return
 			}
+			var choice agentChoice
+			if err := decodeJSON(r, &choice); err != nil || choice.validate() != nil {
+				s.error(w, http.StatusBadRequest, "invalid_agent", "渲染工具无效")
+				return
+			}
 			sceneDir := sc.Directory
 			t, err := s.runWriteTask(p, "scene.render", "渲染 "+id, func(ctx context.Context, t *Task) error {
-				_, err := s.runStudioCLI(ctx, p, "scene", "run", sceneDir)
+				_, err := s.runStudioCLIWith(ctx, p, agentChoice{Renderer: choice.Renderer}, "scene", "run", sceneDir)
 				return err
 			})
 			if err != nil {
@@ -462,19 +472,28 @@ func findProjectVideo(root string) string {
 }
 
 func (s *Server) runStudioCLI(ctx context.Context, project Project, args ...string) ([]byte, error) {
-	executable, err := os.Executable()
+	return s.runStudioCLIWith(ctx, project, agentChoice{}, args...)
+}
+
+// runStudioCLIWith 与 runStudioCLI 相同，但用网页选的工具覆盖项目配置：子进程环境里的
+// RENDERER 优先于 article-to-motion.conf，am scene run 因此用网页选的渲染工具。
+func (s *Server) runStudioCLIWith(ctx context.Context, project Project, choice agentChoice, args ...string) ([]byte, error) {
+	self, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, executable, args...)
+	cmd := exec.CommandContext(ctx, self, args...)
 	cmd.Dir = project.Path
 	projectConfig, err := config.Load(project.Path, nil)
 	if err != nil {
 		return nil, err
 	}
+	if projectConfig, err = overrideAgents(projectConfig, choice); err != nil {
+		return nil, err
+	}
 	if s.config.Unsafe {
 		args = append([]string{"--unsafe"}, args...)
-		cmd.Args = append([]string{executable}, args...)
+		cmd.Args = append([]string{self}, args...)
 	}
 	cmd.Env = envutil.EnvList(projectConfig.ChildEnvironment(envutil.EnvMap(), s.config.Unsafe, envutil.ParsePassthrough(os.Getenv("AM_PASSTHROUGH_ENV"))))
 	out, err := cmd.CombinedOutput()

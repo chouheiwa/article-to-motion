@@ -1,0 +1,4 @@
+#!/bin/sh
+# 只用来让 Studio 认为 codex 已安装，供工具选择的 e2e 使用；真被调用时直接失败。
+echo "fake codex: not runnable in e2e" >&2
+exit 1

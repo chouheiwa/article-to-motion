@@ -207,6 +207,7 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 | 项目级写锁（`acquire` / `release`）：一轮对话与渲染、拼接、复查等写任务互斥 | 否则任务写的文件会被算进那一轮的改动，回退时误删 |
 | 预先指定或从流里读到会话 id 立刻落盘；续接失败且没有任何产出时，带对话记录开新会话 | 进程中途崩了也能续接；CLI 会话过期是常态，不能让对话就此断掉 |
 | 会话、事件（`<id>.events.jsonl`，SSE 的 id 就是 seq）、轮次记录都在项目的 `production/studio/` 下 | 状态跟着项目走，`am archive` 一起归档；Studio 重启后进行中的轮次标成 `interrupted` |
+| 编排工具与渲染工具按会话选（`SessionMeta.Tool` / `Renderer`），默认取项目配置；Studio 不改 `article-to-motion.conf`，选择经 `sessionConfig` 覆盖后由 `ChildEnvironment` 写进子进程的 `ORCHESTRATOR` / `RENDERER` | 环境变量优先于项目配置，编排工具在这一轮里调用的 `am scene run` 因此也用会话选的渲染工具。换编排工具时清掉 CLI 会话 id，下一轮按续接失败的路子带上对话记录开新会话 |
 | 项目路径一律用 `currentProject()` 返回的（已 `EvalSymlinks`） | macOS 的 `/var` 是 `/private/var` 的链接，两种写法会被当成两个项目，锁和会话都对不上 |
 | `/api/files` 与 `/preview/scenes/` 经 `containedPath` 解析（含符号链接），`.env` 一律不读 | 默认只监听回环地址，但手机经隧道访问时这两个接口就是对外的 |
 
@@ -222,11 +223,11 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 | `package-lock.json` 里的地址是 `registry.npmjs.org` | 用镜像装完依赖要把 `resolved` 换回官方源再提交，CI 访问不到国内镜像 |
 | `ui/src/types.ts` 与后端 JSON 字段一一对应 | 前后端之间没有生成代码，改字段两边一起改 |
 
-`internal/studio/ui/e2e/fake-bin/claude` 是 e2e 用的假编排工具，`ui/playwright.config.mjs` 只给 Studio 服务进程的 PATH 加上它；提示词里带「慢慢来」时它只回报会话然后挂起，供取消测试使用。单元测试里的假工具同理，子进程环境按安全模式白名单构造，测试开关要经 `AM_PASSTHROUGH_ENV` 透传。
+`internal/studio/ui/e2e/fake-bin/claude` 是 e2e 用的假编排工具（同目录的 `codex` 只用来显示为「已安装」，被调用时直接失败），`ui/playwright.config.mjs` 只给 Studio 服务进程的 PATH 加上它；提示词里带「慢慢来」时它只回报会话然后挂起，供取消测试使用。单元测试里的假工具同理，子进程环境按安全模式白名单构造，测试开关要经 `AM_PASSTHROUGH_ENV` 透传。
 
 ## 新增一个 AI CLI
 
-工具矩阵散落在五个文件，加一个工具必须七处同步改，漏一处会在运行期才炸：
+工具矩阵散落在六个文件，加一个工具必须八处同步改，漏一处会在运行期才炸：
 
 | 位置 | 作用 |
 |---|---|
@@ -237,6 +238,7 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 | `internal/config/config.go` `validTools` | `ORCHESTRATOR` / `RENDERER` 取值校验 |
 | `internal/scene/scene.go` `validRenderer` | `scene.json` 的 `renderer` 字段校验 |
 | `internal/scene/skills.go` `rendererSkillDirs` | 该工具的技能目录约定（家目录级与项目级） |
+| `internal/studio/agents.go` `agentOrder` | Studio 工具选择里的展示名与顺序，`TestAgentOrderCoversValidTools` 守着与 `validTools` 一致 |
 
 同时更新 `assets/shared/article-to-motion.conf`、`assets/shared/.env.example`、`README.md`、`README.en.md` 里的可选值注释。
 

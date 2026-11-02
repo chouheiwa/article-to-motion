@@ -5,7 +5,18 @@ import { Preview, type Tab } from './components/Preview';
 import { ProjectDialog } from './components/ProjectDialog';
 import { Sidebar } from './components/Sidebar';
 import { Tasks } from './components/Tasks';
-import type { Attachment, BeatState, Project, ProjectState, Scene, SessionMeta, Task, TreeFile } from './types';
+import type {
+  AgentChoice,
+  AgentsResponse,
+  Attachment,
+  BeatState,
+  Project,
+  ProjectState,
+  Scene,
+  SessionMeta,
+  Task,
+  TreeFile,
+} from './types';
 
 const SESSION_KEY = 'am-studio-session:';
 
@@ -47,6 +58,9 @@ export function App() {
   const [version, setVersion] = useState(1);
   const [dialog, setDialog] = useState(false);
   const [toast, setToast] = useState('');
+  const [agents, setAgents] = useState<AgentsResponse | null>(null);
+  // 新对话还没建会话时选的工具；建了会话以后以会话记录为准。
+  const [pending, setPending] = useState<AgentChoice>({ tool: '', renderer: '' });
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -120,9 +134,17 @@ export function App() {
     setAttachments([]);
     setRecent(new Set());
     setSessionId(currentId ? recall(currentId) : '');
+    setAgents(null);
     if (currentId) {
       void loadProject();
       void loadTasks();
+      api<AgentsResponse>('/api/agents').then(
+        (result) => {
+          setAgents(result);
+          setPending({ tool: result.orchestrator, renderer: result.renderer });
+        },
+        () => setAgents(null),
+      );
     }
   }, [currentId]);
 
@@ -161,10 +183,30 @@ export function App() {
     [loadProject],
   );
 
+  const session = sessions.find((s) => s.session_id === sessionId);
+  const choice: AgentChoice = session
+    ? { tool: session.tool, renderer: session.renderer || agents?.renderer || '' }
+    : pending;
+
+  const changeChoice = async (next: AgentChoice) => {
+    if (!session) {
+      setPending(next);
+      return;
+    }
+    try {
+      await post(`/api/sessions/${session.session_id}/agents`, next);
+      await loadSessions();
+    } catch (err) {
+      notify(errorText(err));
+    }
+  };
+
+  // 渲染按钮用当前会话（或新对话）选的渲染工具。
+  const renderer = choice.renderer;
   const run = useCallback(
-    async (path: string, payload: unknown = {}) => {
+    async (path: string, payload: Record<string, unknown> = {}) => {
       try {
-        await post(path, payload);
+        await post(path, /\/render(\/all)?$/.test(path) ? { ...payload, renderer } : payload);
         notify('已开始，进度见右上角任务。');
         await loadTasks();
         await loadSessions();
@@ -172,7 +214,7 @@ export function App() {
         notify(errorText(err));
       }
     },
-    [loadTasks, loadSessions, notify],
+    [loadTasks, loadSessions, notify, renderer],
   );
 
   const chooseSession = (id: string) => {
@@ -244,6 +286,9 @@ export function App() {
             run={run}
           />
           <Chat
+            agents={agents}
+            choice={choice}
+            onChoice={changeChoice}
             sessions={sessions}
             sessionId={sessionId}
             busy={busy}

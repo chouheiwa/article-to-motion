@@ -47,6 +47,7 @@ type SessionMeta struct {
 	Title        string    `json:"title"`
 	Kind         string    `json:"kind"` // chat | production
 	Tool         string    `json:"tool"`
+	Renderer     string    `json:"renderer,omitempty"`
 	CLISessionID string    `json:"cli_session_id,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
@@ -236,11 +237,11 @@ func (s *Server) getSession(projectPath, id string) *session {
 	return s.sessions.sessions[sessionKey(projectPath, id)]
 }
 
-func (s *Server) createSession(projectPath, kind, title, tool string) (*session, error) {
+func (s *Server) createSession(projectPath, kind, title string, agents agentChoice) (*session, error) {
 	s.loadSessions(projectPath)
 	now := time.Now().UTC()
 	sess := &session{project: projectPath, wake: make(chan struct{}), meta: SessionMeta{
-		ID: newID("s"), Title: title, Kind: kind, Tool: tool, CreatedAt: now, UpdatedAt: now, Turns: []string{},
+		ID: newID("s"), Title: title, Kind: kind, Tool: agents.Tool, Renderer: agents.Renderer, CreatedAt: now, UpdatedAt: now, Turns: []string{},
 	}}
 	if err := writeMeta(sess); err != nil {
 		return nil, err
@@ -382,7 +383,10 @@ func (s *Server) startTurn(p Project, sess *session, req turnRequest) (*Turn, er
 	if err := validateAttachments(p.Path, req.Attachments); err != nil {
 		return nil, err
 	}
-	cfg, err := config.Load(p.Path, nil)
+	s.sessions.mu.Lock()
+	meta := sess.meta
+	s.sessions.mu.Unlock()
+	cfg, err := sessionConfig(p.Path, meta)
 	if err != nil {
 		return nil, err
 	}
@@ -437,9 +441,8 @@ func (s *Server) prepareTurn(p Project, sess *session, cfg config.Config, req tu
 	s.updateMeta(sess, func(meta *SessionMeta) {
 		meta.Turns = append(meta.Turns, turn.ID)
 		meta.RunningTurn = turn.ID
-		if meta.Tool != cfg.Orchestrator {
-			// 换了编排工具，原来的会话 id 对新工具没有意义，下一轮按续接失败处理。
-			meta.Tool, meta.CLISessionID = cfg.Orchestrator, ""
+		if meta.Tool == "" {
+			meta.Tool = cfg.Orchestrator
 		}
 	})
 	s.emit(sess, turn.ID, SessionEvent{Event: agentrun.Event{Kind: kindUser, Text: display + attachmentText(req.Attachments)}})
