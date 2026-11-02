@@ -14,8 +14,9 @@ export function Tasks({ tasks, onCancel }: { tasks: Task[]; onCancel: (id: strin
   const active = tasks.filter((t) => t.status === 'queued' || t.status === 'running').length;
   return (
     <div class="tasks">
-      <button class={'pill ' + (active ? 'busy' : '')} id="tasks-toggle" onClick={() => setOpen(!open)}>
-        任务{active ? ` ${active}` : ''}
+      <button class="quiet" id="tasks-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+        任务
+        {tasks.length > 0 && <span class={'count' + (active ? ' on' : '')}>{active || tasks.length}</span>}
       </button>
       {open && (
         <div class="popover" id="tasks">
@@ -33,7 +34,7 @@ export function Tasks({ tasks, onCancel }: { tasks: Task[]; onCancel: (id: strin
               )}
               {task.error && <pre class="task-error">{task.error}</pre>}
               {(task.status === 'running' || task.status === 'queued') && (
-                <button class="ghost small" onClick={() => onCancel(task.task_id)}>
+                <button class="ghost" onClick={() => onCancel(task.task_id)}>
                   取消
                 </button>
               )}

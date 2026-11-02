@@ -3,6 +3,7 @@ import { ApiError, errorText, post, rawURL } from '../api';
 import type { AgentChoice, AgentsResponse, Attachment, EventKind, FileChange, SessionEvent, SessionMeta, Usage } from '../types';
 import { AgentPicker } from './AgentPicker';
 import { DiffDialog } from './DiffDialog';
+import { Icon } from './Icon';
 
 // SSE 的 event 字段就是事件种类，EventSource 只把具名事件派给对应监听器，所以要逐个注册。
 const kinds: EventKind[] = [
@@ -121,18 +122,19 @@ export function Chat(props: Props) {
           <option value="">新对话</option>
           {props.sessions.map((s) => (
             <option key={s.session_id} value={s.session_id}>
-              {(s.kind === 'production' ? '🎬 ' : '') + s.title}
+              {s.title}
+              {s.kind === 'production' ? ' · 制作' : ''}
+              {s.turns.length ? ` · ${s.turns.length} 轮` : ''}
             </option>
           ))}
         </select>
-        <button class="secondary small" onClick={() => props.onSession('')} title="新开一个对话">
-          ＋
+        <button class="quiet" onClick={() => props.onSession('')} title="新开一个对话">
+          新对话
         </button>
-        <button id="start-production" class="small" disabled={blocked} onClick={startProduction} title="与 am run 相同的整片制作">
+        <button id="start-production" class="primary" disabled={blocked} onClick={startProduction} title="与 am run 相同的整片制作">
           开始制作
         </button>
       </header>
-      <AgentPicker agents={props.agents} value={props.choice} disabled={running || sending} onChange={props.onChoice} />
 
       <div
         class="messages"
@@ -150,55 +152,66 @@ export function Chat(props: Props) {
           </div>
         )}
         <Transcript events={events} onOpenFile={props.onOpenFile} onReverted={props.onTurnEnd} />
-        {running && <div class="typing">正在处理…</div>}
+        {running && (
+          <div class="typing">
+            <span class="dot busy" />
+            正在处理…
+          </div>
+        )}
       </div>
 
       <footer class="composer">
         {props.busy && !running && <p class="busy-line">项目正忙：{props.busy}</p>}
-        {props.attachments.length > 0 && (
-          <ul class="chips" id="attachments">
-            {props.attachments.map((a, index) => (
-              <li key={index}>
-                {a.path && <img src={rawURL(a.path)} alt="" />}
-                <span>
-                  {a.scene_id}
-                  {a.seconds !== undefined && a.path ? ` ${a.seconds.toFixed(2)}s` : ''}
-                  {a.region ? ' 选区' : ''}
-                  {a.selector ? ` ${a.selector}` : ''}
-                </span>
-                <button class="ghost small" onClick={() => props.onRemoveAttachment(index)} aria-label="移除附件">
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <textarea
-          id="prompt"
-          rows={3}
-          value={draft}
-          placeholder={running ? '这一轮还在进行…' : '说说要改什么（⌘/Ctrl + Enter 发送）'}
-          onInput={(e) => setDraft(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              void send();
-            }
-          }}
-        />
-        <div class="composer-actions">
-          {error && <span class="error-line">{error}</span>}
-          <span class="spacer" />
-          {running ? (
-            <button id="cancel-turn" class="danger" onClick={cancel}>
-              停止
-            </button>
-          ) : (
-            <button id="send" disabled={blocked || !draft.trim()} onClick={send}>
-              发送
-            </button>
+        <div class="composer-box">
+          {props.attachments.length > 0 && (
+            <ul class="chips" id="attachments">
+              {props.attachments.map((a, index) => (
+                <li key={index}>
+                  {a.path && <img src={rawURL(a.path)} alt="" />}
+                  <span>
+                    {a.scene_id}
+                    {a.seconds !== undefined && a.path ? ` · 帧 ${Math.round(a.seconds * 30)}` : ''}
+                    {a.region ? ' · 区域' : ''}
+                    {a.selector ? ` · ${a.selector}` : ''}
+                  </span>
+                  <button class="ghost" onClick={() => props.onRemoveAttachment(index)} aria-label="移除附件">
+                    <Icon name="close" size={10} />
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
+          <label for="prompt" class="sr-only">
+            消息
+          </label>
+          <textarea
+            id="prompt"
+            rows={2}
+            value={draft}
+            placeholder={running ? '这一轮还在进行…' : '说说要改什么……（⌘/Ctrl + Enter 发送）'}
+            onInput={(e) => setDraft(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                void send();
+              }
+            }}
+          />
+          <div class="composer-actions">
+            <AgentPicker agents={props.agents} value={props.choice} disabled={running || sending} onChange={props.onChoice} />
+            <span class="spacer" />
+            {running ? (
+              <button id="cancel-turn" class="primary" onClick={cancel} aria-label="停止本轮" title="停止本轮">
+                <Icon name="stop" />
+              </button>
+            ) : (
+              <button id="send" class="primary" disabled={blocked || !draft.trim()} onClick={send} aria-label="发送" title="发送">
+                <Icon name="send" size={14} />
+              </button>
+            )}
+          </div>
         </div>
+        {error && <p class="error-line">{error}</p>}
       </footer>
     </aside>
   );
@@ -362,9 +375,10 @@ function ToolCard({ call, result }: { call: SessionEvent; result?: SessionEvent 
   return (
     <details class={'tool ' + state}>
       <summary>
+        <span class={'dot ' + (state === 'running' ? 'busy' : state === 'failed' ? 'bad' : 'ok')} />
         <span class="tool-name">{call.tool}</span>
         <span class="tool-input ellipsis">{summarizeInput(call.input)}</span>
-        <span class="tool-state">{state === 'running' ? '…' : state === 'failed' ? '失败' : '✓'}</span>
+        <span class="tool-state">{state === 'running' ? '运行中' : state === 'failed' ? '失败' : '完成'}</span>
       </summary>
       {call.input !== undefined && <pre>{JSON.stringify(call.input, null, 2)}</pre>}
       {result?.text && <pre class="tool-output">{result.text}</pre>}
@@ -411,7 +425,8 @@ function TurnCard(props: {
     <section class={'turn-card ' + (event.status ?? '')} id={'turn-' + event.turn_id}>
       <header>
         <strong>{props.reverted ? '已回退这一轮' : statusLabels[event.status ?? ''] ?? event.status}</strong>
-        {tokens > 0 && <span class="muted small">{tokens.toLocaleString()} tokens</span>}
+        {changes.length > 0 && <span class="small muted">本轮改动 {changes.length} 个文件</span>}
+        {tokens > 0 && <span class="muted small mono">{tokens.toLocaleString()} tokens</span>}
       </header>
       {event.text && <p class="error-line">{event.text}</p>}
       {changes.length === 0 ? (
@@ -435,8 +450,8 @@ function TurnCard(props: {
       )}
       {changes.length > 0 && !props.reverted && (
         <footer>
-          <button class="secondary small revert" id="revert-turn" disabled={working} onClick={revert}>
-            回退这一轮
+          <button class="quiet revert" id="revert-turn" disabled={working} onClick={revert}>
+            回退本轮
           </button>
         </footer>
       )}

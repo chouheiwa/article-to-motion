@@ -1,73 +1,71 @@
 import { useMemo, useState } from 'preact/hooks';
-import type { ProjectState, Scene, TreeFile } from '../types';
+import type { ProjectState, TreeFile } from '../types';
 
-// 与 internal/studio/studio.go 的 stageFor 一一对应。
-const stageLabels: Record<string, string> = {
-  setup: '准备：还没有终稿或分镜',
-  plan: '脚本与分镜：还没有镜头',
-  render: '渲染：镜头还没出齐',
-  assemble: '合成：镜头已出齐，还没有成片',
-  review: '复查：已有成片',
-  publish: '发布：成片与发布信息都已就绪',
-};
+// 与 internal/studio/studio.go 的 stageFor 一一对应，顺序就是制作顺序。
+const stages: [string, string][] = [
+  ['setup', '准备'],
+  ['plan', '脚本与分镜'],
+  ['render', '渲染'],
+  ['assemble', '合成'],
+  ['review', '复查'],
+  ['publish', '发布'],
+];
 
 interface Props {
   state: ProjectState | null;
-  scenes: Scene[];
   tree: TreeFile[];
-  sceneId: string;
   filePath: string;
   recent: Set<string>;
-  onScene: (id: string) => void;
   onFile: (path: string) => void;
 }
 
 export function Sidebar(props: Props) {
   const { state } = props;
+  const current = state ? stages.findIndex(([id]) => id === state.stage) : -1;
+  const changed = props.tree.filter((f) => props.recent.has(f.path)).length;
   return (
     <aside class="pane left">
       {state && (
-        <section class="block stage" id="stage">
-          <h3>阶段</h3>
-          <p>{stageLabels[state.stage] ?? state.stage}</p>
-          <div class="meter" title={`${state.scenes.completed}/${state.scenes.total}`}>
-            <i style={{ width: `${state.scenes.total ? (state.scenes.completed / state.scenes.total) * 100 : 0}%` }} />
+        <section id="stage" aria-label="制作阶段">
+          <div class="section-head">
+            <span class="label">制作阶段</span>
           </div>
-          <p class="muted">
-            镜头 {state.scenes.completed}/{state.scenes.total} 已出片
-            {state.scenes.stale > 0 && <span class="warn"> · {state.scenes.stale} 个过期</span>}
-          </p>
-          {state.metadata.canvas && (
-            <p class="muted">
-              画幅：{state.metadata.canvas}
-              {state.metadata.fps ? ` · ${state.metadata.fps}fps` : ''}
-            </p>
-          )}
-          {state.metadata.style_name && <p class="muted">风格：{state.metadata.style_name}</p>}
+          <ol class="stages">
+            {stages.map(([id, name], index) => {
+              const status = index < current ? 'done' : index === current ? 'now' : '';
+              return (
+                <li key={id} class={status} aria-current={status === 'now' ? 'step' : undefined}>
+                  <div class="stage-rail" aria-hidden="true">
+                    <span class="stage-dot" />
+                    {index < stages.length - 1 && <span class="stage-line" />}
+                  </div>
+                  <div class="stage-body">
+                    <div class="stage-name">{name}</div>
+                    {status === 'now' && state.scenes.total > 0 && (
+                      <div class="stage-detail">
+                        <div class="meter" title={`${state.scenes.completed}/${state.scenes.total}`}>
+                          <i style={{ width: `${(state.scenes.completed / state.scenes.total) * 100}%` }} />
+                        </div>
+                        <span>
+                          {state.scenes.completed} / {state.scenes.total} 镜头已出片
+                          {state.scenes.stale > 0 && <span class="warn"> · {state.scenes.stale} 个过期</span>}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+          <div class="rule" />
         </section>
       )}
 
-      <section class="block">
-        <h3>镜头</h3>
-        {props.scenes.length === 0 && <p class="muted">还没有镜头。开始制作后会在这里出现。</p>}
-        <ul class="list scenes">
-          {props.scenes.map((scene) => (
-            <li key={scene.id} class={scene.id === props.sceneId ? 'active' : ''}>
-              <button class="row scene" onClick={() => props.onScene(scene.id)}>
-                <span class={'dot ' + (scene.stale ? 'stale' : scene.exists ? 'ok' : 'todo')} />
-                <span class="ellipsis">{scene.id}</span>
-                <span class="muted small">
-                  {scene.duration_seconds ? scene.duration_seconds.toFixed(1) + 's' : ''}
-                  {scene.stale ? ' 过期' : scene.exists ? '' : ' 未出片'}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section class="block grow">
-        <h3>文件</h3>
+      <section aria-label="文件" style={{ flex: 1, minHeight: 0 }}>
+        <div class="section-head">
+          <span class="label">文件</span>
+          {changed > 0 && <span class="recent-count">● 本轮改动 {changed}</span>}
+        </div>
         <FileTree files={props.tree} selected={props.filePath} recent={props.recent} onFile={props.onFile} />
       </section>
     </aside>
@@ -116,8 +114,15 @@ function FileTree(props: { files: TreeFile[]; selected: string; recent: Set<stri
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((child) => (
           <li key={child.path}>
-            <button class="row tree-dir" style={{ paddingLeft: 8 + depth * 12 }} onClick={() => toggle(child.path)}>
-              <span class="caret">{open.has(child.path) ? '▾' : '▸'}</span>
+            <button
+              class="row tree-dir"
+              style={{ paddingLeft: 8 + depth * 14 }}
+              aria-expanded={open.has(child.path)}
+              onClick={() => toggle(child.path)}
+            >
+              <span class="caret" aria-hidden="true">
+                {open.has(child.path) ? '▾' : '▸'}
+              </span>
               <span class="ellipsis">{child.name}</span>
             </button>
             {open.has(child.path) && <ul class="list">{render(child, depth + 1)}</ul>}
@@ -127,11 +132,12 @@ function FileTree(props: { files: TreeFile[]; selected: string; recent: Set<stri
         <li key={file.path} class={file.path === props.selected ? 'active' : ''}>
           <button
             class={'row tree-file' + (props.recent.has(file.path) ? ' recent' : '')}
-            style={{ paddingLeft: 20 + depth * 12 }}
+            style={{ paddingLeft: 26 + depth * 14 }}
             title={file.path}
             onClick={() => props.onFile(file.path)}
           >
             <span class="ellipsis">{file.path.split('/').pop()}</span>
+            {props.recent.has(file.path) && <span class="mark" aria-label="本轮改动" />}
           </button>
         </li>
       ))}
