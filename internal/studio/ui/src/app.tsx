@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { api, errorText, post } from './api';
 import { Chat } from './components/Chat';
+import { Icon } from './components/Icon';
 import { Preview, type Tab } from './components/Preview';
 import { ProjectDialog } from './components/ProjectDialog';
 import { Sidebar } from './components/Sidebar';
@@ -227,38 +228,56 @@ export function App() {
   return (
     <div class="app">
       <header class="topbar">
-        <div class="brand">
-          ArticleToMotion <span>Studio</span>
+        <div class="brand" title="ArticleToMotion Studio">
+          <span class="brand-mark" aria-hidden="true">
+            AM
+          </span>
+          <span class="brand-name">Studio</span>
         </div>
+        <span class="divider" aria-hidden="true" />
         <button class="project-switch" id="open-project-trigger" onClick={() => setDialog(true)}>
-          <strong id="title">{project?.name ?? '选择项目'}</strong>
-          {project && <span class="muted ellipsis">{project.path}</span>}
+          <strong id="title" class="ellipsis">
+            {project?.name ?? '选择项目'}
+          </strong>
+          {project && <span class="path ellipsis">{project.path}</span>}
+          <Icon name="chevron" />
         </button>
+        {state?.metadata.canvas && (
+          <span class="chip mono">
+            {state.metadata.canvas}
+            {state.metadata.fps ? ` · ${state.metadata.fps}fps` : ''}
+          </span>
+        )}
+        {state?.metadata.style_name && <span class="chip">{state.metadata.style_name}</span>}
         <span class="spacer" />
-        {busy && <span class="pill busy" title="同一时间只有一个写入者">{busy}</span>}
+        {busy && (
+          <span class="pill busy" title="同一时间只有一个写入者">
+            <span class="dot busy" />
+            {busy}
+          </span>
+        )}
         <Tasks tasks={tasks} onCancel={(id) => run(`/api/tasks/${id}/cancel`)} />
-        <span class={'pill ' + (connected ? 'ok' : 'bad')}>{connected ? '已连接' : '连接断开'}</span>
+        <span class="pill conn" title={connected ? '已连接' : '连接断开'}>
+          <span class={'dot ' + (connected ? 'ok' : 'bad')} />
+          <span>{connected ? '已连接' : '连接断开'}</span>
+        </span>
       </header>
 
       {loaded && !currentId ? (
         <div class="welcome">
           <h1>先打开或新建一个项目</h1>
           <p class="muted">Studio 在项目目录里启动编排工具，你在对话里说要改什么，它直接改项目文件。</p>
-          <button onClick={() => setDialog(true)}>选择项目</button>
+          <button class="primary" onClick={() => setDialog(true)}>
+            选择项目
+          </button>
         </div>
       ) : (
         <div class="workspace">
           <Sidebar
             state={state}
-            scenes={scenes}
             tree={tree}
-            sceneId={sceneId}
             filePath={filePath}
             recent={recent}
-            onScene={(id) => {
-              setSceneId(id);
-              if (tab !== 'scene' && tab !== 'compose') setTab('scene');
-            }}
             onFile={(path) => {
               setFilePath(path);
               setTab('file');
@@ -282,6 +301,10 @@ export function App() {
             onFile={(path) => {
               setFilePath(path);
               setTab('file');
+            }}
+            onScene={(id) => {
+              setSceneId(id);
+              if (tab !== 'scene' && tab !== 'compose') setTab('scene');
             }}
             run={run}
           />

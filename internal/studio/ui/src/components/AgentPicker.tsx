@@ -7,7 +7,7 @@ interface Props {
   onChange: (choice: AgentChoice) => void;
 }
 
-/** 编排工具与渲染工具的选择。没装的工具可见但不可选，免得选了才在运行时报找不到命令。 */
+/** 编排工具与渲染工具的选择，放在输入框底部。没装的工具可见但不可选，免得选了才在运行时报找不到命令。 */
 export function AgentPicker({ agents, value, disabled, onChange }: Props) {
   if (!agents) return null;
   const options = (current: string, fallback: string) =>
@@ -19,19 +19,14 @@ export function AgentPicker({ agents, value, disabled, onChange }: Props) {
       </option>
     ));
   return (
-    <div class="agent-picker" id="agent-picker">
-      <label title="在项目目录里对话、改文件的工具">
+    <>
+      <label class="agent-select" title="在项目目录里对话、改文件的工具">
         <span>编排</span>
-        <select
-          id="agent-tool"
-          value={value.tool}
-          disabled={disabled}
-          onChange={(e) => onChange({ ...value, tool: e.currentTarget.value })}
-        >
+        <select id="agent-tool" value={value.tool} disabled={disabled} onChange={(e) => onChange({ ...value, tool: e.currentTarget.value })}>
           {options(value.tool, agents.orchestrator)}
         </select>
       </label>
-      <label title="am scene run 渲染单个镜头用的工具">
+      <label class="agent-select" title="am scene run 渲染单个镜头用的工具">
         <span>渲染</span>
         <select
           id="agent-renderer"
@@ -42,7 +37,7 @@ export function AgentPicker({ agents, value, disabled, onChange }: Props) {
           {options(value.renderer, agents.renderer)}
         </select>
       </label>
-      {agents.config_error && <span class="error-line">{agents.config_error}</span>}
-    </div>
+      {agents.config_error && <span class="error-line agent-error">{agents.config_error}</span>}
+    </>
   );
 }

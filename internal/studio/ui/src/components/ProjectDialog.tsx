@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { api, errorText, post } from '../api';
-import type { DirectoryEntry, Project, StylesResponse } from '../types';
+import type { CanvasOption, DirectoryEntry, Project, StylesResponse } from '../types';
+import { Icon } from './Icon';
 
 interface Props {
   projects: Project[];
@@ -55,21 +56,23 @@ export function ProjectDialog({ projects, currentId, onClose, onOpened }: Props)
 
   return (
     <div class="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <section class="modal" role="dialog" aria-label="项目" id="project-dialog">
+      <section class={'modal' + (mode === 'create' ? ' wide' : '')} role="dialog" aria-label="项目" id="project-dialog">
         <header class="modal-head">
+          <h2>项目</h2>
           <div class="segmented">
             <button class={mode === 'recent' ? 'on' : ''} onClick={() => setMode('recent')} disabled={!projects.length}>
-              最近项目
+              最近
             </button>
             <button class={mode === 'open' ? 'on' : ''} onClick={() => setMode('open')} id="mode-open">
               打开目录
             </button>
             <button class={mode === 'create' ? 'on' : ''} onClick={() => setMode('create')} id="mode-create">
-              新建项目
+              新建
             </button>
           </div>
-          <button class="ghost" onClick={onClose} aria-label="关闭">
-            ✕
+          <span class="spacer" />
+          <button class="ghost icon" onClick={onClose} aria-label="关闭">
+            <Icon name="close" />
           </button>
         </header>
 
@@ -97,6 +100,7 @@ export function ProjectDialog({ projects, currentId, onClose, onOpened }: Props)
             <code class="path">{selected || '选择一个项目目录（带 frame.md 或 scenes/）'}</code>
             <button
               id="open-project"
+              class="primary"
               disabled={!selected || working}
               onClick={() => run(() => post('/api/projects/open', { path: selected }))}
             >
@@ -113,7 +117,7 @@ export function ProjectDialog({ projects, currentId, onClose, onOpened }: Props)
           />
         )}
 
-        {error && <p class="error-line">{error}</p>}
+        {error && <p class="error-line pad">{error}</p>}
       </section>
     </div>
   );
@@ -132,9 +136,9 @@ function RecentList(props: {
         <li key={p.id} class={p.id === props.currentId ? 'active' : ''}>
           <button class="row" onClick={() => props.onSwitch(p.id)}>
             <strong>{p.name}</strong>
-            <span class="muted ellipsis">{p.path}</span>
+            <span class="path ellipsis">{p.path}</span>
           </button>
-          <button class="ghost small" title="从列表移除（不删除文件）" onClick={() => props.onRemove(p.id)}>
+          <button class="ghost" title="从列表移除（不删除文件）" onClick={() => props.onRemove(p.id)}>
             移除
           </button>
         </li>
@@ -155,8 +159,9 @@ function DirectoryBrowser(props: {
   return (
     <div class="browser">
       <div class="browser-bar">
-        <button class="ghost small" disabled={!listing.parent} onClick={() => props.onBrowse(listing.parent)}>
-          ↑ 上一级
+        <button class="ghost" disabled={!listing.parent} onClick={() => props.onBrowse(listing.parent)}>
+          <Icon name="up" />
+          上一级
         </button>
         <code class="path">{listing.path}</code>
         <span class="spacer" />
@@ -171,7 +176,7 @@ function DirectoryBrowser(props: {
               onClick={() => (entry.is_project || !props.projectsOnly ? props.onSelect(entry.path) : props.onBrowse(entry.path))}
               onDblClick={() => props.onBrowse(entry.path)}
             >
-              <span>{entry.is_project ? '🎬' : '📁'}</span>
+              <Icon name={entry.is_project ? 'film' : 'folder'} size={14} />
               <span class="ellipsis">{entry.name}</span>
               {entry.is_project && <span class="tag">项目</span>}
             </button>
@@ -201,68 +206,101 @@ function CreateForm(props: {
   }, []);
 
   if (!styles) return <p class="muted pad">正在读取画幅与风格…</p>;
-  const options = [styles.custom, ...styles.styles];
+  const options = [...styles.styles, styles.custom];
+  const chosenCanvas = styles.canvases.find((c) => c.id === canvas);
+  const chosenStyle = options.find((o) => o.id === style);
   return (
     <div class="create">
-      <label class="field">
-        <span>创建在</span>
-        <code class="path">{props.parent}</code>
-      </label>
-      <label class="field">
-        <span>项目名称</span>
-        <input
-          id="new-project-name"
-          value={name}
-          placeholder="例如 summer-story"
-          autocomplete="off"
-          onInput={(e) => setName(e.currentTarget.value)}
-        />
-      </label>
-      <div class="field">
-        <span>画幅</span>
-        <div class="segmented">
-          {styles.canvases.map((c) => (
-            <button key={c.id} class={c.id === canvas ? 'on' : ''} onClick={() => setCanvas(c.id)}>
-              {c.label}
-            </button>
-          ))}
+      <div class="create-body">
+        <div class="create-side">
+          <label class="field">
+            <span class="label">项目名</span>
+            <input
+              id="new-project-name"
+              class="mono"
+              value={name}
+              placeholder="例如 summer-story"
+              autocomplete="off"
+              onInput={(e) => setName(e.currentTarget.value)}
+            />
+            <span class="path">
+              {props.parent}/{name.trim() || '…'}
+            </span>
+          </label>
+          <div class="field" role="radiogroup" aria-label="画幅">
+            <span class="label">画幅</span>
+            {styles.canvases.map((c) => (
+              <button
+                key={c.id}
+                role="radio"
+                aria-checked={c.id === canvas}
+                class={'canvas-option' + (c.id === canvas ? ' on' : '')}
+                onClick={() => setCanvas(c.id)}
+              >
+                <CanvasShape option={c} />
+                <span>
+                  <strong>{c.label.replace(/\s+\d+×\d+$/, '').replace(/\s+/g, ' ')}</strong>
+                  <span class="mono small muted">
+                    {c.width}×{c.height}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+          <span class="small muted">画幅和风格写进项目文件，之后可以在对话里让编排工具改。</span>
         </div>
-      </div>
-      <div class="field">
-        <span>风格</span>
-        <div class="style-grid">
-          {options.map((option) => (
-            <button
-              key={option.id}
-              class={'style-card' + (option.id === style ? ' on' : '')}
-              onClick={() => setStyle(option.id)}
-            >
-              {option.id === styles.custom.id ? (
-                <div class="style-thumb custom">自主定风格</div>
-              ) : (
-                <img
-                  class="style-thumb"
-                  loading="lazy"
-                  alt=""
-                  src={`/api/styles/${option.id}/${canvas}/${styles.archetypes[0]}.png`}
-                />
-              )}
-              <strong>{option.name}</strong>
-              <span class="muted">{option.label.replace(/^[^：]*：/, '')}</span>
-            </button>
-          ))}
+        <div class="create-main">
+          <span class="label">风格</span>
+          <div class="style-grid" role="radiogroup" aria-label="风格">
+            {options.map((option) => (
+              <button
+                key={option.id}
+                role="radio"
+                aria-checked={option.id === style}
+                class={'style-card' + (option.id === style ? ' on' : '')}
+                onClick={() => setStyle(option.id)}
+              >
+                {option.id === styles.custom.id ? (
+                  <span class="style-thumb custom">
+                    <Icon name="plus" size={16} />
+                  </span>
+                ) : (
+                  <img class="style-thumb" loading="lazy" alt="" src={`/api/styles/${option.id}/${canvas}/${styles.archetypes[0]}.png`} />
+                )}
+                <span class="style-card-text">
+                  <strong>{option.id === styles.custom.id ? '自定义风格' : option.name}</strong>
+                  <span class="muted">
+                    {option.id === styles.custom.id ? '制作第一步由编排工具定稿' : option.label.replace(/^[^：]*：/, '')}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       <footer class="modal-foot">
-        <span class="muted">创建后点「开始制作」，就会按项目里的 PROMPT.md 走整片流程。</span>
+        <span class="small muted">
+          {chosenCanvas?.label.replace(/\s+/g, ' ')} · {chosenStyle?.id === styles.custom.id ? '自定义风格' : chosenStyle?.name}
+        </span>
         <button
           id="create-project"
+          class="primary"
           disabled={!name.trim() || props.working}
           onClick={() => props.onCreate({ parent: props.parent, name: name.trim(), canvas, style })}
         >
-          创建项目
+          创建并打开
         </button>
       </footer>
     </div>
+  );
+}
+
+/** 画幅的比例示意：长边固定 40px。 */
+function CanvasShape({ option }: { option: CanvasOption }) {
+  const scale = 40 / Math.max(option.width, option.height);
+  return (
+    <span class="canvas-shape" aria-hidden="true">
+      <i style={{ width: Math.round(option.width * scale), height: Math.round(option.height * scale) }} />
+    </span>
   );
 }

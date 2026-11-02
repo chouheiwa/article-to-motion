@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { api, errorText } from '../api';
 import { hunks, lineDiff } from '../diff';
 import type { TurnFile } from '../types';
+import { Icon } from './Icon';
 
 export function DiffDialog({ turnId, path, onClose }: { turnId: string; path: string; onClose: () => void }) {
   const [file, setFile] = useState<TurnFile | null>(null);
@@ -15,8 +16,9 @@ export function DiffDialog({ turnId, path, onClose }: { turnId: string; path: st
       <section class="modal wide" role="dialog" aria-label="改动">
         <header class="modal-head">
           <code class="path">{path}</code>
-          <button class="ghost" onClick={onClose} aria-label="关闭">
-            ✕
+          <span class="spacer" />
+          <button class="ghost icon" onClick={onClose} aria-label="关闭">
+            <Icon name="close" />
           </button>
         </header>
         {error && <p class="error-line">{error}</p>}
