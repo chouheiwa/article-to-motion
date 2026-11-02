@@ -22,6 +22,7 @@ import (
 	assets "github.com/chouheiwa/articale-to-motion"
 	"github.com/chouheiwa/articale-to-motion/internal/preset"
 	"github.com/chouheiwa/articale-to-motion/internal/project"
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed web
@@ -608,7 +609,7 @@ func inspectProject(p Project) map[string]any {
 		}
 	}
 	meta := projectMetadata(p.Path)
-	return map[string]any{"project": p, "stage": stageFor(p.Path), "metadata": meta, "media": map[string]any{"audio": fileExists(filepath.Join(p.Path, "production", "audio", "candidate.mp4")), "final": fileExists(filepath.Join(p.Path, "final.mp4")) || fileExists(filepath.Join(p.Path, "production", "final.mp4")), "publish": fileExists(filepath.Join(p.Path, "publish.md"))}, "scenes": map[string]any{"total": len(scenes), "completed": done, "stale": stale}, "issues": projectIssues(p.Path)}
+	return map[string]any{"project": p, "stage": stageFor(p.Path, scenes), "metadata": meta, "media": map[string]any{"audio": fileExists(filepath.Join(p.Path, "production", "audio", "candidate.mp4")), "final": fileExists(filepath.Join(p.Path, "final.mp4")) || fileExists(filepath.Join(p.Path, "production", "final.mp4")), "publish": fileExists(filepath.Join(p.Path, "publish.md"))}, "scenes": map[string]any{"total": len(scenes), "completed": done, "stale": stale}, "issues": projectIssues(p.Path)}
 }
 
 func projectIssues(root string) any {
@@ -626,50 +627,85 @@ func projectIssues(root string) any {
 	return []any{}
 }
 
+// projectMetadata 从 frame.md 的 front matter 取风格与画幅。Studio 只是观察者，项目改到一半、
+// front matter 写坏了也照样返回能读到的部分，不报错。
+//
+// 只看顶层键：front matter 里 colors.canvas 这类同名的嵌套键是颜色值，按行扫描会读错。
 func projectMetadata(root string) map[string]string {
 	result := map[string]string{}
 	body, err := os.ReadFile(filepath.Join(root, "frame.md"))
 	if err != nil {
 		return result
 	}
-	// frame.md uses a small YAML front matter block. Keep this reader deliberately
-	// permissive: Studio is an observer and should still show partial state when a
-	// project is mid-edit or has an invalid document.
-	inFrontMatter := false
-	for _, line := range strings.Split(string(body), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "---" {
-			if !inFrontMatter {
-				inFrontMatter = true
-				continue
-			}
-			break
+	text := strings.ReplaceAll(string(body), "\r\n", "\n")
+	if !strings.HasPrefix(text, "---\n") {
+		return result
+	}
+	end := strings.Index(text[4:], "\n---")
+	if end < 0 {
+		return result
+	}
+	var front map[string]any
+	if yaml.Unmarshal([]byte(text[4:4+end]), &front) != nil {
+		return result
+	}
+	for _, key := range []string{"style_id", "style_name"} {
+		if value, ok := front[key].(string); ok && value != "" {
+			result[key] = value
 		}
-		if !inFrontMatter {
-			continue
+	}
+	switch canvas := front["canvas"].(type) {
+	case string:
+		// 旧项目把画幅预设 id 直接写成标量。
+		if canvas != "" {
+			result["canvas_id"] = canvas
 		}
-		parts := strings.SplitN(trimmed, ":", 2)
-		if len(parts) != 2 {
-			continue
+	case map[string]any:
+		width, _ := canvas["width_px"].(int)
+		height, _ := canvas["height_px"].(int)
+		fps, _ := canvas["fps"].(int)
+		orientation, _ := canvas["orientation"].(string)
+		if width > 0 && height > 0 {
+			result["canvas"] = fmt.Sprintf("%d×%d", width, height)
 		}
-		key, value := strings.TrimSpace(parts[0]), strings.Trim(strings.TrimSpace(parts[1]), "\"'")
-		switch key {
-		case "canvas", "canvas_id", "style_id", "style_name", "narration", "mode":
-			if value != "" {
-				result[key] = value
-			}
+		if fps > 0 {
+			result["fps"] = fmt.Sprint(fps)
+		}
+		if orientation != "" {
+			result["orientation"] = orientation
+		}
+		if p, ok := preset.ByCanvas(width, height, fps, orientation); ok {
+			result["canvas_id"] = p.ID
 		}
 	}
 	return result
 }
-func stageFor(root string) string {
-	if fileExists(filepath.Join(root, "production", "run-report.json")) {
+
+// stageFor 按项目里已有的产物推断制作进度，口播与卡点两种模式都适用。只看文件是否存在，
+// 不读内容：它是网页上的一行提示，判断错了也不影响任何流程。
+func stageFor(root string, scenes []SceneSummary) string {
+	exists := func(parts ...string) bool { return fileExists(filepath.Join(append([]string{root}, parts...)...)) }
+	final := exists("final.mp4") || exists("production", "final.mp4")
+	rendered := len(scenes) > 0
+	for _, sc := range scenes {
+		rendered = rendered && sc.Exists
+	}
+	switch {
+	case final && exists("publish.md"):
+		return "publish"
+	case final:
 		return "review"
-	}
-	if fileExists(filepath.Join(root, "script.md")) || fileExists(filepath.Join(root, "transcription.srt")) {
+	case rendered:
+		return "assemble"
+	case len(scenes) > 0:
 		return "render"
+	case exists("production", "script-final.md"), exists("production", "audio", "voice.srt"), exists("production", "scene-plan.json"),
+		exists("production", "beat", "grid.json"), exists("production", "beat", "plan.json"),
+		exists("script.md"), exists("SCRIPT.md"), exists("transcription.srt"):
+		return "plan"
+	default:
+		return "setup"
 	}
-	return "setup"
 }
 
 func (s *Server) static(w http.ResponseWriter, r *http.Request) {

@@ -494,10 +494,11 @@ func TestStudioContentAndTaskEndpoints(t *testing.T) {
 		t.Fatalf("issues = %#v", issues)
 	}
 
+	// 有了成片才进复查；只跑过 run-all、还有镜头没出片时仍在渲染阶段。
 	writeStudioFile(t, filepath.Join(root, "production", "run-report.json"), "{}")
 	status, body = studioRequest(t, http.MethodGet, ts.URL+"/api/state", "")
 	requireStudioStatus(t, status, http.StatusOK, body)
-	if body["stage"] != "review" {
+	if body["stage"] != "render" {
 		t.Fatalf("stage after run report = %#v", body)
 	}
 

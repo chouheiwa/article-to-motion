@@ -1,10 +1,14 @@
 import { useMemo, useState } from 'preact/hooks';
 import type { ProjectState, Scene, TreeFile } from '../types';
 
+// 与 internal/studio/studio.go 的 stageFor 一一对应。
 const stageLabels: Record<string, string> = {
-  setup: '准备：还没有脚本',
-  render: '制作：脚本已就绪，渲染镜头中',
-  review: '复查：已有运行报告',
+  setup: '准备：还没有终稿或分镜',
+  plan: '脚本与分镜：还没有镜头',
+  render: '渲染：镜头还没出齐',
+  assemble: '合成：镜头已出齐，还没有成片',
+  review: '复查：已有成片',
+  publish: '发布：成片与发布信息都已就绪',
 };
 
 interface Props {
@@ -33,6 +37,12 @@ export function Sidebar(props: Props) {
             镜头 {state.scenes.completed}/{state.scenes.total} 已出片
             {state.scenes.stale > 0 && <span class="warn"> · {state.scenes.stale} 个过期</span>}
           </p>
+          {state.metadata.canvas && (
+            <p class="muted">
+              画幅：{state.metadata.canvas}
+              {state.metadata.fps ? ` · ${state.metadata.fps}fps` : ''}
+            </p>
+          )}
           {state.metadata.style_name && <p class="muted">风格：{state.metadata.style_name}</p>}
         </section>
       )}

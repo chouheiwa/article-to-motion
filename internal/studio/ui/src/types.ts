@@ -9,7 +9,7 @@ export interface Project {
 
 export interface ProjectState {
   project: Project;
-  stage: 'setup' | 'render' | 'review' | string;
+  stage: 'setup' | 'plan' | 'render' | 'assemble' | 'review' | 'publish' | string;
   metadata: Record<string, string>;
   media: { audio: boolean; final: boolean; publish: boolean };
   scenes: { total: number; completed: number; stale: number };
