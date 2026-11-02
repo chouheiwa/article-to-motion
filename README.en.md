@@ -39,7 +39,7 @@ Non-interactive environments (CI, pipes) must pass `--canvas` explicitly; there 
 
 ### Local Studio workspace
 
-Launch the local web workspace to inspect project status and scenes:
+Launch the local web workspace to drive production through chat and preview scenes in the browser:
 
 ```bash
 am studio
@@ -49,7 +49,14 @@ am studio --listen 127.0.0.1:4317
 
 Studio listens on loopback by default. For phone access, use your own Tailscale, VPN, or SSH tunnel and explicitly choose a listen address; Studio does not provide public accounts or HTTPS.
 
-The workspace exposes project state, scenes, assets, script browsing, AI chat, reviewable operations, snapshots and undo, task progress, and review reports. Mutations require a preview and confirmation; the project files remain the source of truth used by the CLI.
+Chat is the main entry point. Studio starts the configured orchestrator (`ORCHESTRATOR`) in the project directory, streams its output to the page, and resumes the same CLI session across turns. "Start production" runs the same prompt as `am run`; you can keep refining in that session or open a new chat for local edits.
+
+- **Studio never edits project files itself.** Changes come only from an orchestrator turn or from buttons that call `am` subcommands directly (render, concat, validate, review, confirm the beat grid).
+- **Every turn can be reverted.** Studio snapshots the project before and after each turn, lists the files the turn changed, shows each file before and after, and can revert the whole turn. If any of those files changed again later, the revert is refused as a whole rather than applied partially. Media files and files over 2 MB are listed but not reverted; re-render instead.
+- **One writer at a time.** While a turn runs, render and concat buttons report that the project is busy, and vice versa.
+- **Sessions survive restarts.** Sessions, events, and snapshots live under the project's `production/studio/`. If the CLI session cannot be resumed (for example it expired), Studio starts a new one seeded with the earlier transcript.
+
+`am --unsafe studio` disables permission isolation just like `am --unsafe run`; see safe mode below.
 
 The browser regression flow lives in `internal/studio/e2e/` and requires Node.js 22+:
 

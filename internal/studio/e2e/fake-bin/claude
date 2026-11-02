@@ -1,0 +1,14 @@
+#!/bin/sh
+# Studio e2e 用的假 claude：回报会话、改写 scenes/scene-001/prompt.md、输出 stream-json。
+# playwright.config.mjs 把本目录放在 Studio 服务进程 PATH 的最前面。
+sid="e2e-session"; prev=""
+for a in "$@"; do
+  if [ "$prev" = "--session-id" ] || [ "$prev" = "--resume" ]; then sid="$a"; fi
+  prev="$a"
+done
+printf '{"type":"system","subtype":"init","session_id":"%s"}\n' "$sid"
+printf 'after\n' > scenes/scene-001/prompt.md
+printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Write","input":{"file_path":"scenes/scene-001/prompt.md"}}]}}\n'
+printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}\n'
+printf '{"type":"assistant","message":{"content":[{"type":"text","text":"已把镜头提示词改好"}]}}\n'
+printf '{"type":"result","subtype":"success","is_error":false,"result":"done","usage":{"input_tokens":1,"output_tokens":1},"num_turns":1}\n'

@@ -194,6 +194,24 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 
 调试产生的单片内容留在仓库外，不要靠 `.gitignore` 遮掩——未跟踪文件同样会被这个测试扫到。
 
+## Studio
+
+`am studio`（`internal/studio`）是对话驱动的本地工作台，仿 OpenDesign：在项目目录里启动编排工具，把 `internal/agentrun` 的统一事件经 SSE 推给网页，多轮续接同一个 CLI 会话。「开始制作」与 `am run` 共用 `project.RunPrompt`。
+
+| 约定 | 原因 |
+|---|---|
+| Studio 自己不写项目文件；改动只来自一轮对话，或 `studioCommands` / 镜头渲染这类直接调 `am` 子命令的按钮 | 旧版自造过一套 Operation 类型，镜头动作、相机写进 `production/studio/*.json` 再注入渲染提示词，等于绕开项目文件的第二条编辑通道。不要再加回来：要改什么就让编排工具改项目文件 |
+| 每轮前后各扫一遍项目（`scanTree`），差异即本轮改动，回退按快照恢复 | 编排工具改了哪些文件只有事后比对才知道，工具调用事件并不可靠（Bash 里也能写文件） |
+| 回退时任一文件在本轮之后又变过，整体拒绝（`ConflictError`），不做部分回退 | 部分回退会留下一半新一半旧的项目，比不回退更难收拾 |
+| 文本按 sha256 存进 `production/studio/blobs/`；媒体扩展名、含 NUL、超过 2 MB 的只记 stat，列出但不回退 | 渲染产物每轮存一份不现实，重渲染即可 |
+| 项目级写锁（`acquire` / `release`）：一轮对话与渲染、拼接、复查等写任务互斥 | 否则任务写的文件会被算进那一轮的改动，回退时误删 |
+| 预先指定或从流里读到会话 id 立刻落盘；续接失败且没有任何产出时，带对话记录开新会话 | 进程中途崩了也能续接；CLI 会话过期是常态，不能让对话就此断掉 |
+| 会话、事件（`<id>.events.jsonl`，SSE 的 id 就是 seq）、轮次记录都在项目的 `production/studio/` 下 | 状态跟着项目走，`am archive` 一起归档；Studio 重启后进行中的轮次标成 `interrupted` |
+| 项目路径一律用 `currentProject()` 返回的（已 `EvalSymlinks`） | macOS 的 `/var` 是 `/private/var` 的链接，两种写法会被当成两个项目，锁和会话都对不上 |
+| `/api/files` 与 `/preview/scenes/` 经 `containedPath` 解析（含符号链接），`.env` 一律不读 | 默认只监听回环地址，但手机经隧道访问时这两个接口就是对外的 |
+
+`internal/studio/e2e/fake-bin/claude` 是 e2e 用的假编排工具，`playwright.config.mjs` 只给 Studio 服务进程的 PATH 加上它。单元测试里的假工具同理，子进程环境按安全模式白名单构造，测试开关要经 `AM_PASSTHROUGH_ENV` 透传。
+
 ## 新增一个 AI CLI
 
 工具矩阵散落在五个文件，加一个工具必须七处同步改，漏一处会在运行期才炸：

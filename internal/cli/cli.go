@@ -115,25 +115,8 @@ func currentEnvironment() map[string]string {
 }
 
 func addExecutableLocation(env map[string]string) {
-	executable, err := os.Executable()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "警告：无法获取可执行文件路径：%v\n", err)
-		return
-	}
-	executable, err = filepath.Abs(executable)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "警告：无法解析可执行文件路径：%v\n", err)
-		return
-	}
-	if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {
-		executable = resolved
-	}
-	env["AM_EXECUTABLE"] = executable
-	directory := filepath.Dir(executable)
-	if current := env["PATH"]; current != "" {
-		env["PATH"] = directory + string(os.PathListSeparator) + current
-	} else {
-		env["PATH"] = directory
+	if err := envutil.AddExecutableLocation(env); err != nil {
+		fmt.Fprintf(os.Stderr, "警告：%v\n", err)
 	}
 }
 
@@ -201,7 +184,7 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	root.PersistentFlags().BoolVar(&unsafe, "unsafe", false,
-		"关闭 AI CLI 的权限隔离（危险）。只对会启动 AI CLI 的 run / scene run / scene run-all 生效，"+
+		"关闭 AI CLI 的权限隔离（危险）。只对会启动 AI CLI 的 run / studio / scene run / scene run-all 生效，"+
 			"对 init、config、validate、archive 无作用；会传递给嵌套镜头任务")
 
 	var skipHyperframes bool
@@ -907,7 +890,7 @@ SVG 转 PNG 这一步不能用 ImageMagick 代替：多数 ImageMagick 构建自
 	root.AddCommand(newAlignCommand(stdout))
 	root.AddCommand(newCastCmd(stdout))
 	root.AddCommand(newDialogueCmd(stdout))
-	root.AddCommand(newStudioCommand(stdout, stderr))
+	root.AddCommand(newStudioCommand(stdout, stderr, &unsafe))
 	return root
 }
 

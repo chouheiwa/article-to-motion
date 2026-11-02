@@ -64,3 +64,28 @@ func ParsePassthrough(value string) []string {
 func IsUnsafe(flag bool) bool {
 	return flag || os.Getenv("AM_UNSAFE") == "1"
 }
+
+// AddExecutableLocation 把当前 am 可执行文件所在目录放到 env 的 PATH 首位，并注入
+// 绝对路径为 AM_EXECUTABLE：编排工具在提示词里调用的 am 就是启动它的这一个，
+// 用户项目里不需要也不应该有 am 二进制。am run 与 am studio 共用。
+func AddExecutableLocation(env map[string]string) error {
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("无法获取可执行文件路径：%w", err)
+	}
+	executable, err = filepath.Abs(executable)
+	if err != nil {
+		return fmt.Errorf("无法解析可执行文件路径：%w", err)
+	}
+	if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {
+		executable = resolved
+	}
+	env["AM_EXECUTABLE"] = executable
+	directory := filepath.Dir(executable)
+	if current := env["PATH"]; current != "" {
+		env["PATH"] = directory + string(os.PathListSeparator) + current
+	} else {
+		env["PATH"] = directory
+	}
+	return nil
+}

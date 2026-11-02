@@ -30,6 +30,8 @@ type Config struct {
 	ListenAddr  string
 	ProjectPath string
 	ConfigPath  string
+	// Unsafe 对应 am --unsafe：编排工具与 am 子命令都关闭权限隔离。
+	Unsafe bool
 }
 
 type Project struct {
@@ -51,6 +53,7 @@ type Server struct {
 	current  string
 	started  time.Time
 	features featureState
+	sessions sessionState
 }
 
 func New(cfg Config) (*Server, error) {
@@ -73,7 +76,6 @@ func New(cfg Config) (*Server, error) {
 	}
 	s.ensureFeatures()
 	s.loadPersistedTasks()
-	s.loadPersistedOperations()
 	return s, nil
 }
 
@@ -194,6 +196,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/assets", s.assetsAPI)
 	mux.HandleFunc("/api/publish", s.publishAPI)
 	s.featureRoutes(mux)
+	s.sessionRoutes(mux)
 	mux.HandleFunc("/", s.static)
 	return withJSONErrors(mux)
 }
