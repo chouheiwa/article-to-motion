@@ -460,7 +460,7 @@ scenes/
 - 建立 `prompt.md`：本镜头的创意方向、视觉概念和表达重点。交付规格、阶段消息等执行契约由 `am` 保证，不在本文件中。
 - 使用 `am init` 装进项目 `.agents/skills/` 的技能。技能缺失时重跑 `am init` 补齐，不要自己跑 `npx hyperframes skills`——那会装到本机 HOME 而不是项目里，绕过版本固定；也不得从其他项目或本机目录复制。
 - 建立渲染器锁定文件：固定 HyperFrames 版本为 `{{HYPERFRAMES_VERSION}}` 并要求每次 CLI 调用都带 `npx --yes hyperframes@{{HYPERFRAMES_VERSION}}` 前缀；禁止 `hyperframes@latest`、不带版本的 `npx hyperframes`、`hyperframes skills`、`skills update` 以及任何会改动已装技能的命令；禁止读取 `.env` 或打印凭据；禁止改动 `scene.json` 里的执行契约。文件名取决于该镜头所用渲染工具会自动读取的项目级指令文件（例如 `claude` 读 `CLAUDE.md`），按所选工具各自的约定命名，不要不管用哪个工具都写成 `CLAUDE.md`。
-- 锁定文件写「只在本镜头目录内工作、不查看兄弟镜头和上级项目目录」时，必须写明一条例外：项目根下的 `.agents/skills/`。全部技能都在那里——HyperFrames 官方技能与随 `am` 二进制下发的 `text-to-lottie`、`algorithmic-art` 同处一个目录，路径由 `am` 解析后注入提示词。它在项目内但在镜头目录之外，会被「只在本镜头目录内工作」挡住；缺这条例外，渲染工具会拒读动效 rule 索引，动画退化成只有淡入和位移。
+- 锁定文件写「只在本镜头目录内工作、不查看兄弟镜头和上级项目目录」时，必须写明一条例外：项目根下的 `.agents/skills/`。全部技能都在那里——HyperFrames 官方技能与随 `am` 二进制下发的 `text-to-lottie`、`algorithmic-art` 同处一个目录，路径由 `am` 解析后注入提示词。它在项目内但在镜头目录之外，会被「只在本镜头目录内工作」挡住；缺这条例外，渲染工具会拒读组合契约与动效手法，动画退化成只有淡入和位移。
 - 把完整的 `transcription-production.srt` 复制为镜头目录中的 `transcription.srt`，让渲染工具理解全文上下文。
 - 如果项目提供 `frame.md`，只把它当作画布、帧率和安全区等技术信息的来源；不得把其中的配色、字体、版式、示例图或动效文字当作创作命令。
 - 用户需要的图片、字体和脚本必须复制进使用它的镜头目录，以目录内相对路径引用；不得依赖镜头目录之外的文件或系统字体。

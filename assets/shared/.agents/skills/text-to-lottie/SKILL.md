@@ -19,8 +19,8 @@ description: 为 HyperFrames 镜头制作 Lottie/Bodymovin JSON 图层资产—�
 
 **不符合的，一律不要用 Lottie 做：**
 
-- 文字排版与逐字动画、标题入场、字幕——用 HTML 文本加 `hyperframes-animation` 的文字排版类 rule。Lottie 里的文字要么被转成路径丢掉可访问性和清晰度，要么依赖字体嵌入，两条路在这个渲染链上都更差。
-- 数字滚动、图表、数据统计——`hyperframes-animation` 有专门的数据统计类 rule，且数值经常要跟文案对齐，烘死在 JSON 里改不动。
+- 文字排版与逐字动画、标题入场、字幕——用 HTML 文本加 `hyperframes` 技能 `references/motion.md` 里的标题与文字手法。Lottie 里的文字要么被转成路径丢掉可访问性和清晰度，要么依赖字体嵌入，两条路在这个渲染链上都更差。
+- 数字滚动、图表、数据统计——用 HTML 与 GSAP 驱动（`hyperframes` 技能 `references/runtimes.md` 写明图表由 GSAP tween 的 `onUpdate` 驱动），且数值经常要跟文案对齐，烘死在 JSON 里改不动。
 - 转场、相机推拉、整镜头的运镜——这些是镜头级编排，归 HyperFrames 时间线管。
 - 真实素材（照片、视频、截图）的处理。
 - 整个镜头。**任何时候都不要产出一个铺满画幅、承担镜头全部内容的 Lottie。**
@@ -48,7 +48,7 @@ description: 为 HyperFrames 镜头制作 Lottie/Bodymovin JSON 图层资产—�
 
 **放置：** JSON 写在镜头目录内，例如 `assets/logo-reveal.json`（相对镜头目录）。不得写到镜头目录之外——渲染会拒绝逃出镜头目录的路径。
 
-**加载：** 按 `hyperframes-animation` 技能 `adapters/lottie.md` 的契约接进组合。要点：
+**加载：** 按 `hyperframes` 技能 `references/runtimes.md` 的 Lottie 一行与「dotLottie browser setup」一节接进组合。要点：
 
 - 播放器是 **lottie-web**（或 dotLottie），不是 Skia Skottie。
 - `autoplay: false`、`loop: false`，由 HyperFrames 统一 seek。

@@ -39,7 +39,7 @@ cd my-video
 
 ### 本地 Studio 工作台
 
-可以启动一个本地网页工作台查看项目状态和镜头清单：
+可以启动一个本地网页工作台，在浏览器里用对话驱动制作并预览镜头：
 
 ```bash
 am studio                         # 浏览器打开后选择项目
@@ -49,15 +49,27 @@ am studio --listen 127.0.0.1:4317
 
 默认只监听本机。需要手机访问时，请使用自己的 Tailscale、VPN 或 SSH 隧道，并显式指定监听地址；Studio 不提供公网账户或 HTTPS。
 
-工作台提供项目状态、镜头列表、镜头产物访问、脚本和资产浏览、AI 对话、结构化操作预览与确认、修改前快照、撤销、任务进度和审查报告接口。写操作必须先预览并确认，项目文件仍是 CLI 读取的权威来源。
+工作台的主入口是对话：它在项目目录里启动配置的编排工具（`ORCHESTRATOR`），把它的输出实时推到网页上，多轮对话续接同一个 CLI 会话。「开始制作」等于在网页里跑 `am run`，之后在同一个会话里继续改；也可以开新的对话只做局部修改。
 
-Studio 的浏览器回归测试位于 `internal/studio/e2e/`，需要 Node.js 22+：
+- **Studio 自己不改项目文件。** 改动只来自编排工具的一轮对话，或者渲染、拼接、校验、复查、确认卡点网格这类直接调用 `am` 子命令的按钮。
+- **每轮可以回退。** 每轮开始和结束各给项目拍一次快照，结束后列出这一轮改了哪些文件，可以逐个看改动前后的内容，也可以整轮回退。某个文件在这一轮之后又被改过时，回退会整体拒绝，不做部分回退。媒体文件和 2 MB 以上的文件只列出变化，不回退，需要时重渲染。
+- **每个会话自选工具。** 对话栏顶部可以为这个会话选编排工具和渲染工具，默认取项目配置，没装的工具不能选。选择只对这个会话生效，不改 `article-to-motion.conf`。会话中途换编排工具时，下一轮会带上之前的对话记录开新的 CLI 会话。
+- **同一时间只有一个写入者。** 一轮对话进行中，渲染、拼接等按钮返回「项目正忙」；反过来也一样。
+- **会话可以恢复。** 会话、事件和快照存在项目的 `production/studio/` 下，关掉浏览器或重启 Studio 后都还在。CLI 会话续接失败时（例如会话过期），会带上之前的对话记录开新会话。
+
+`am --unsafe studio` 与 `am --unsafe run` 一样关闭权限隔离，见下文「安全模式」。
+
+界面分三栏：左边是制作阶段、镜头列表和项目文件树；中间预览镜头产物（可逐帧步进、圈选区域）、镜头的合成页面（可点选元素）、成片、风格示例、复查联系表和发布信息；右边是对话。镜头截帧、圈出的区域和点选的元素都能附到下一条消息里。卡点项目在确认网格前，中间栏顶部会出现试听轨和「确认网格」按钮。
+
+前端源码在 `internal/studio/ui/`（Vite + TypeScript + Preact），构建产物提交在 `internal/studio/web/`，由 `go:embed` 打进二进制，所以只改 Go 代码不需要 Node。改了前端需要 Node.js 22+：
 
 ```bash
-cd internal/studio/e2e
-npm install
+cd internal/studio/ui
+npm ci
+npm run dev        # 开发服务器，接口转给本机 127.0.0.1:4321 上的 am studio
+npm run build      # 写入 ../web，连同源码一起提交
 npx playwright install chromium
-AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm test
+AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm run test:e2e
 ```
 
 ### 视觉方向
@@ -68,7 +80,7 @@ AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm test
 
 `am init` 仍接受旧版 `--style` 参数以兼容已有脚本，但它不再构成视觉要求。
 
-`am init` 不覆盖内容不同的已有文件。默认联网安装固定版本 0.8.14 的 HyperFrames 官方技能到项目的 `.agents/skills/`，与随二进制下发的 `text-to-lottie`、`algorithmic-art` 同处一个目录；安装依赖 `git`，离线或 CI 环境可使用 `--skip-hyperframes`。
+`am init` 不覆盖内容不同的已有文件。默认联网安装固定版本 0.8.225 的 HyperFrames 官方技能到项目的 `.agents/skills/`，与随二进制下发的 `text-to-lottie`、`algorithmic-art` 同处一个目录；安装依赖 `git`，离线或 CI 环境可使用 `--skip-hyperframes`。
 
 技能装进项目而不是 HOME，是因为项目之间互不覆盖只有这样才成立：上游安装器只认 `homedir`，一台机器上只有一份技能，项目 A 与项目 B 固定不同版本时谁后初始化谁说了算。安装全程不写用户 HOME——上游安装器在项目外的临时目录里运行，产物再搬进项目。
 
@@ -190,6 +202,19 @@ am --unsafe run
 ```
 
 `--unsafe` 会传递给嵌套镜头任务。安全模式需要额外传递的环境变量通过 `AM_PASSTHROUGH_ENV=NAME1,NAME2` 显式列出。
+
+安全模式下，编排工具（`am run`）只被放行文件编辑和一组命令：`am`、`ffmpeg`、`ffprobe`、`ls`、`mkdir`、固定版本的 `npx --yes hyperframes@…`，以及 `TTS_PROVIDER` 与 `ALIGN_PROVIDER` 各自对应的那一个命令（如 `mmx`、`edge-tts`、`mlx_audio.stt.generate`；`funasr` 对应 `python3`）。安装命令（`brew`、`pip`、`uv`、`npm`）不在其中，相关工具要先自己装好。各工具的实现方式不同：
+
+| 工具 | 安全模式的限制方式 |
+|---|---|
+| claude、codebuddy | `acceptEdits` 加 `--settings` 白名单；`.env` 禁读。Claude Code 的 `acceptEdits` 自身还会放行工作区内的 `touch`、`mkdir`、`rm` 等文件系统命令 |
+| qoder | `accept_edits` 加逐条 `--allowed-tools` |
+| codex | 没有命令白名单，由 `workspace-write` 沙箱限制写入范围；为了 TTS 放开了沙箱网络 |
+| opencode | 没有可用的白名单机制，安全模式下仍能执行任何命令 |
+
+codebuddy 的这套参数没有经过完整实测。
+
+`am run` 的终端输出是整理过的事件：开头打印会话 id，正文原样打印，每次工具调用一行摘要，失败的工具结果用 `✗` 标出，结尾打印用量。
 
 ## 视觉检查与拼接
 

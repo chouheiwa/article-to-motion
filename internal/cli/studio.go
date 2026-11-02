@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/chouheiwa/articale-to-motion/internal/envutil"
 	"github.com/chouheiwa/articale-to-motion/internal/studio"
 	"github.com/spf13/cobra"
 )
 
-func newStudioCommand(stdout, stderr io.Writer) *cobra.Command {
+func newStudioCommand(stdout, stderr io.Writer, unsafe *bool) *cobra.Command {
 	var listen, configPath string
 	cmd := &cobra.Command{
 		Use:   "studio [PROJECT_DIR]",
@@ -31,7 +32,7 @@ func newStudioCommand(stdout, stderr io.Writer) *cobra.Command {
 			if listen != "127.0.0.1:4317" && listen != "localhost:4317" && listen != "[::1]:4317" {
 				fmt.Fprintf(stderr, "提示：Studio 将监听 %s。远程访问请使用 Tailscale、VPN 或 SSH 隧道。\n", listen)
 			}
-			s, err := studio.New(studio.Config{ListenAddr: listen, ProjectPath: path, ConfigPath: configPath})
+			s, err := studio.New(studio.Config{ListenAddr: listen, ProjectPath: path, ConfigPath: configPath, Unsafe: envutil.IsUnsafe(*unsafe)})
 			if err != nil {
 				return err
 			}

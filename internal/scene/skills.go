@@ -16,9 +16,7 @@ const (
 	// SkillsDirEnv 是逃生阀：显式指定技能目录，优先级高于一切自动探测。
 	SkillsDirEnv = "HYPERFRAMES_SKILLS_DIR"
 
-	skillManifestFile   = "SKILL.md"
-	rulesIndexFile      = "rules-index.md"
-	blueprintsIndexFile = "blueprints-index.md"
+	skillManifestFile = "SKILL.md"
 
 	// portableSkillsDir 是不绑定具体工具的通用约定，作为兜底候选。
 	portableSkillsDir = ".agents/skills"
@@ -27,17 +25,23 @@ const (
 	maxWalkUpLevels = 40
 )
 
-// AnimationSkillName 是承载全部动效知识的技能目录名。
-const AnimationSkillName = "hyperframes-animation"
+// HyperFramesSkillName 是上游入口技能的目录名，承载组合契约与动效手法。
+//
+// 0.8.185 之前这两部分分属 hyperframes-core 与 hyperframes-animation，入口技能
+// 只负责「选择并安装 owning workflow」，所以当时刻意不注册它；上游合并之后它成了
+// 唯一的契约来源，只能注册并在提示词里收窄范围，见 hyperFramesPrompt。
+const HyperFramesSkillName = "hyperframes"
 
-// HyperFramesCoreSkillName 是组合 HTML 的授权契约技能目录名。
-const HyperFramesCoreSkillName = "hyperframes-core"
+// 入口技能里渲染器必须读的参考文件，同时是判定「完整安装」的必需文件：
+// 只有 SKILL.md 的目录说明上游又挪了结构，提示词里点名的文件全都不存在。
+var (
+	hyperFramesFormatFile   = filepath.Join("references", "format.md")
+	hyperFramesMotionFile   = filepath.Join("references", "motion.md")
+	hyperFramesRuntimesFile = filepath.Join("references", "runtimes.md")
+)
 
 // HyperFramesCLISkillName 是 HyperFrames CLI 用法技能目录名。
 const HyperFramesCLISkillName = "hyperframes-cli"
-
-// HyperFramesCreativeSkillName 是构图、版式与设计遵从的创意方向技能目录名。
-const HyperFramesCreativeSkillName = "hyperframes-creative"
 
 // AlgorithmicArtSkillName 是生成式艺术技能目录名。
 const AlgorithmicArtSkillName = "algorithmic-art"
@@ -88,7 +92,7 @@ type SkillDescriptor struct {
 	// Source 说明技能来自嵌入树还是上游安装。
 	Source SkillSource
 	// RequiredFiles 是技能被视为「完整安装」所必须存在的文件列表。
-	// 至少包含 SKILL.md；动效技能额外要求 rules-index.md。
+	// 至少包含 SKILL.md；入口技能额外要求提示词里点名的参考文件。
 	RequiredFiles []string
 	// PromptSection 返回该技能注入镜头提示词的片段。
 	// skillsDir 为空时应退回按技能名引用，不写死本机路径。
@@ -102,28 +106,16 @@ const SongExplainerSkillName = "song-explainer"
 var RegisteredSkills = []SkillDescriptor{
 	{Name: SongExplainerSkillName, Source: SourceEmbedded, RequiredFiles: []string{skillManifestFile}, PromptSection: songExplainerPrompt},
 	{
-		Name:          AnimationSkillName,
+		Name:          HyperFramesSkillName,
 		Source:        SourceUpstream,
-		RequiredFiles: []string{skillManifestFile, rulesIndexFile},
-		PromptSection: animationPrompt,
-	},
-	{
-		Name:          HyperFramesCoreSkillName,
-		Source:        SourceUpstream,
-		RequiredFiles: []string{skillManifestFile},
-		PromptSection: hyperFramesCorePrompt,
+		RequiredFiles: []string{skillManifestFile, hyperFramesFormatFile, hyperFramesMotionFile, hyperFramesRuntimesFile},
+		PromptSection: hyperFramesPrompt,
 	},
 	{
 		Name:          HyperFramesCLISkillName,
 		Source:        SourceUpstream,
 		RequiredFiles: []string{skillManifestFile},
 		PromptSection: hyperFramesCLIPrompt,
-	},
-	{
-		Name:          HyperFramesCreativeSkillName,
-		Source:        SourceUpstream,
-		RequiredFiles: []string{skillManifestFile},
-		PromptSection: hyperFramesCreativePrompt,
 	},
 	{
 		Name:          AlgorithmicArtSkillName,
@@ -295,35 +287,55 @@ func skillPromptSections(resolved map[string]string) string {
 	return sections
 }
 
-// animationPrompt 是动效技能的提示词片段。
+// hyperFramesPrompt 是上游入口技能的提示词片段：组合契约加动效手法。
 //
-// 这里刻意不设数量配额（几条 rule、几个分类、几个属性）。配额是可以逐项打勾的
-// 指标，渲染器会为了达标加一个与文案无关的 rotation 或 clip-path；公开案例里
-// 把「好看」压成蓝图名与指标的版本，指标全绿、画面反而拥挤平庸。动效数量由
-// 文案决定，这里只要求每个动效说得出理由。
+// 0.8.185 起上游把 hyperframes-animation / hyperframes-core / hyperframes-creative
+// 并进了入口技能 hyperframes，原子 rule 索引（rules-index.md）与蓝图索引随之消失，
+// 组合契约落在 SKILL.md 的 Contract 一节与 references/format.md，动效手法落在
+// references/motion.md。所以这里只点名那几份文件，而不是让渲染器「加载技能」。
 //
-// 环境动效不设项目级风格配额；只要不影响阅读和确定性，就由镜头根据文案决定。
-// 语义元素仍应在到位后稳定停留，避免用装饰动效掩盖信息层级。
-func animationPrompt(skillsDir string) string {
-	reference := fmt.Sprintf(
-		"- 加载 %s 技能，实现前必须读取该技能目录下的 %s（原子动效 rule 索引）。\n"+
-			"  （本机未能定位该技能目录，请使用你自身的技能加载机制载入。）\n",
-		AnimationSkillName, rulesIndexFile)
+// 收窄范围是这一段的主要工作。入口技能的职责是整片制作：故事线三选一、SPEC.md、
+// 分镜、配乐音效、预览审批、桌面应用交接与 REVIEW.md。分镜、旁白和节拍由上层决定
+// 并已写进 scene.json，渲染器照那套走会产出计划文件、给镜头配乐（产物必须无音轨），
+// 还会停在「等人审批预览」。references/look.md 要求把项目根的 frame.md 当成配色与
+// 字体规范，与「视觉自由度」一段正面冲突，必须点名覆盖；format.md 允许用
+// local() 引用本机字体，换一台机器结果就不同，也要点名禁止。这些禁令上游不会替我们守，
+// skills_test.go 有对应的门禁。
+//
+// 动效部分刻意不设数量配额（几种手法、几个属性）。配额是可以逐项打勾的指标，
+// 渲染器会为了达标加一个与文案无关的 rotation 或 clip-path；动效数量由文案决定，
+// 这里只要求每个动效说得出理由。环境动效不设项目级配额；只要不影响阅读和确定性，
+// 就由镜头根据文案决定，语义元素仍应在到位后稳定停留。
+func hyperFramesPrompt(skillsDir string) string {
+	files := fmt.Sprintf("SKILL.md 的 Contract 一节、%s 与 %s；用到 GSAP 以外的运行时（Lottie、Three.js、canvas 等）再读 %s",
+		hyperFramesFormatFile, hyperFramesMotionFile, hyperFramesRuntimesFile)
+	reference := fmt.Sprintf("- 写组合 HTML 前必须读 %s 技能的 %s。\n"+
+		"  （本机未能定位该技能目录，请使用你自身的技能加载机制载入。）\n",
+		HyperFramesSkillName, files)
 	if skillsDir != "" {
-		skill := filepath.Join(skillsDir, AnimationSkillName)
-		reference = fmt.Sprintf(
-			"- 加载 %s 技能。本机该技能目录为：\n    %s\n"+
-				"  实现前必须读取其中的 %s（原子动效 rule 索引）；若该路径不存在，\n"+
-				"  改用你自身的技能加载机制载入 %s 后读取同名文件。\n",
-			AnimationSkillName, skill, rulesIndexFile, AnimationSkillName)
+		reference = fmt.Sprintf("- 写组合 HTML 前必须读 %s 技能的 %s。本机该技能目录为：\n    %s\n",
+			HyperFramesSkillName, files, filepath.Join(skillsDir, HyperFramesSkillName))
 	}
-	return "动效要求（强制）：\n" + reference +
+	return "组合规范（强制）：\n" + reference +
+		"  重点是 data-* 时间属性、class=\"clip\"、子组合结构与确定性渲染规则。\n" +
+		"- 该技能是整片制作的入口，本镜头只取其中的组合契约与动效手法。本镜头只产出一个 composition：" +
+		"不建子项目，不写 STORYBOARD.md / SCRIPT.md / SPEC.md / REVIEW.md 这类计划或复查文件，" +
+		"不走它的 Work loop、故事线选择、预览审批与桌面应用交接——分镜、旁白与节拍已由上层决定并写进 scene.json，你只负责这一镜。\n" +
+		"- 不读也不照做 references/story.md、spec.md、storyboard.md、storyboard-format.md、sound.md、captions.md、overlays.md、review.md 与 types/ 下的片型文件：" +
+		"配乐与音效由上层统一处理，镜头里不放 <audio>；画内字幕按下方的镜头工具库执行；复查按本提示词的画面自查执行。\n" +
+		"- 画幅、帧率与时长以本提示词为准，不用该技能默认的 1920×1080、30fps。" +
+		"不搜索、不安装 registry 组件（catalog、add），不调用 media-use 或任何生成媒体的服务。\n" +
+		"- 该技能 references/look.md 要求把项目根的 frame.md 当作配色与字体规范，本项目不适用：" +
+		"配色与字体按本提示词的「视觉自由度」一段执行；look.md 只读「Video facts」一节，不另立 LOOK 行，不套用 frame-presets。\n" +
+		"- 非内置字体一律用 @font-face 指向镜头目录里的字体文件，不得只写 local() 依赖本机安装的字体：换一台机器渲染结果就不同。\n" +
+		"\n动效要求（强制）：\n" +
+		"- 动效手法以 " + hyperFramesMotionFile + " 为参考：缓动按角色选、快动作带动态模糊、退场短于入场、错峰重叠；" +
+		"其中「Defaults that look generated」列出的写法一律不用。它给的停留秒数只是参考，可读停留以本提示词的其他要求为准。\n" +
 		"- 导演的是状态变化，不只是入场：每个动画先想清楚它最终停在什么状态、那个状态是否说明了这句台词的论点；" +
 		"入场再漂亮，也补不了落定状态说不清的问题。\n" +
 		"- 跟随关系要成立：指针落在它要按的控件上，标签跟着它标注的对象走。\n" +
-		"- 按文案选 rule，不设数量下限：每个动效都要说得出它在表达哪句话、哪层关系或哪个转折，" +
+		"- 按文案选手法，不设数量下限：每个动效都要说得出它在表达哪句话、哪层关系或哪个转折，" +
 		"说不出理由的不加。宁可少而准，不要为了显得丰富堆叠属性。\n" +
-		"- 镜头包含 3 个及以上阶段时，先读同目录 " + blueprintsIndexFile + " 选一个模板再落地。\n" +
 		"- 环境动效可选，整镜最多 1 条，振幅小到不干扰阅读；不得持续漂浮或晃动语义元素。\n" +
 		"- 语义元素到位后应当稳定停留供阅读，这段停留允许画面静止；" +
 		"镜头结尾停在可读的终态，不得停在入场中间态。\n" +
@@ -333,35 +345,16 @@ func animationPrompt(skillsDir string) string {
 		"不得侵占任何元素的可读稳定区间，也不得改变已约定的短语帧。\n"
 }
 
-// algorithmicArtPrompt 是生成式艺术技能的提示词片段。
-// hyperFramesCorePrompt 指向组合 HTML 的授权契约。
-//
-// 上游 SKILL.md 的原话是 "Read before writing composition HTML"——它定义
-// data-* 时间属性、class="clip"、track 结构和确定性渲染规则，写组合前不读
-// 就只能靠猜，而猜错的表现往往是渲染成功但时间轴不对。
-//
-// 同时要收窄范围：该技能还覆盖建子项目和 STORYBOARD.md / SCRIPT.md 计划格式，
-// 那是整片工作流的东西。分镜由 am 决定、已经写进 scene.json，渲染器照着那套
-// 走会产出计划文件并试图自己排布多镜头，直接违反单镜头契约。
-func hyperFramesCorePrompt(skillsDir string) string {
-	reference := fmt.Sprintf("- 写组合 HTML 前必须读 %s 技能。\n"+
-		"  （本机未能定位该技能目录，请使用你自身的技能加载机制载入。）\n",
-		HyperFramesCoreSkillName)
-	if skillsDir != "" {
-		reference = fmt.Sprintf("- 写组合 HTML 前必须读 %s 技能。本机该技能目录为：\n    %s\n",
-			HyperFramesCoreSkillName, filepath.Join(skillsDir, HyperFramesCoreSkillName))
-	}
-	return "组合规范（强制）：\n" + reference +
-		"  重点是 data-* 时间属性、class=\"clip\"、track 结构与确定性渲染规则。\n" +
-		"- 本镜头只产出一个 composition。不建子项目，不写 STORYBOARD.md / SCRIPT.md 计划文件——" +
-		"分镜由上层决定并已写进 scene.json，你只负责这一镜。\n"
-}
-
 // hyperFramesCLIPrompt 指向 CLI 用法，并把可用命令收窄到本地渲染与检查。
 //
-// 上游该技能覆盖 cloud / cloudrun / lambda / publish 等远端渲染路径，以及
-// skills / upgrade 这类会改动已装技能的命令。前者会把镜头送去云端渲染，绕开
-// 本机的确定性前提；后者会顶掉 am 固定的技能版本——两类都是执行契约明令禁止的。
+// 上游该技能按「工作」列出全部命令，其中三类必须挡掉：
+//   - cloud / cloudrun / lambda / publish 把镜头送去远端，绕开本机的确定性前提；
+//   - skills / upgrade 会顶掉 am 固定的技能与 CLI 版本，影响同项目其他镜头；
+//   - preview / open / catch-up / history / feedback / usage 是交互、桌面应用、
+//     遥测与额度查询，无头单镜头渲染里要么卡住等人，要么往外发数据。
+//
+// timeline 只放行读取：它的 move / trim / split 等子命令会改写组合文件，
+// 与「时长由 scene.json 决定」的契约冲突。
 func hyperFramesCLIPrompt(skillsDir string) string {
 	reference := fmt.Sprintf("- CLI 的命令与排错方式见 %s 技能。\n"+
 		"  （本机未能定位该技能目录，请使用你自身的技能加载机制载入。）\n",
@@ -371,36 +364,14 @@ func hyperFramesCLIPrompt(skillsDir string) string {
 			HyperFramesCLISkillName, filepath.Join(skillsDir, HyperFramesCLISkillName))
 	}
 	return "渲染命令（强制）：\n" + reference +
-		"- 只用本地渲染与检查相关的命令（render、check、snapshot）。preview 需要浏览器交互，本环境是无头的，不要用。\n" +
+		"- 只用本地渲染与检查相关的命令：lint、check、snapshot、keyframes、render，以及只读的 timeline --json（不用它的 move、trim、split 等改写子命令）。\n" +
 		"- snapshot 一律带 --describe false：它默认会把画面发给外部视觉服务，本镜头的自查由你自己看图完成。\n" +
 		"- 禁止 cloud、cloudrun、lambda、publish 等远端渲染路径：本镜头必须在本机渲染。\n" +
-		"- 禁止 skills、upgrade 以及任何会改动已装技能的命令：版本已固定，改动会影响其他镜头。\n"
+		"- 禁止 skills、upgrade 以及任何会改动已装技能的命令：版本已固定，改动会影响其他镜头。\n" +
+		"- 不用 preview、present、open、catch-up、history、feedback、usage：本环境是无头的，没有人审批预览，也不向外发送反馈或遥测。\n"
 }
 
-// hyperFramesCreativePrompt 把渲染器指向上游的构图与设计判断参考。
-//
-// 上游 SKILL.md 原话把 house-style.md 与 video-composition.md 称为避免
-// 「generic, web-page-looking output」的首要读物——那正是本项目产出最常见的
-// 毛病。design-adherence.md 则是写完之后对照设计规范自查的清单，供画面自查用。
-//
-// 同时要收窄范围：该技能还覆盖旁白与整片节拍规划。旁白和分镜由上层决定，
-// 渲染器只负责当前镜头，不替整片做计划。视觉方向则由当前镜头自主决定。
-func hyperFramesCreativePrompt(skillsDir string) string {
-	reference := fmt.Sprintf("- 设计本镜头版式前读 %s 技能的 references/house-style.md 与 references/video-composition.md，"+
-		"画面自查时对照 references/design-adherence.md。\n"+
-		"  （本机未能定位该技能目录，请使用你自身的技能加载机制载入。）\n",
-		HyperFramesCreativeSkillName)
-	if skillsDir != "" {
-		reference = fmt.Sprintf("- 设计本镜头版式前读 %s 技能的 references/house-style.md 与 references/video-composition.md，"+
-			"画面自查时对照 references/design-adherence.md。本机该技能目录为：\n    %s\n",
-			HyperFramesCreativeSkillName, filepath.Join(skillsDir, HyperFramesCreativeSkillName))
-	}
-	return "构图与版式参考：\n" + reference +
-		"- 这些文件只是可选的构图参考；只取你认为有助于当前镜头的内容，不把它们当作项目级视觉规范。" +
-		"配色、字体、版式与动效由当前镜头自主决定；安全区仍遵守画布的技术约束。" +
-		"旁白、分镜与整片节拍已由上层决定，不做整片规划。\n"
-}
-
+// algorithmicArtPrompt 是生成式艺术技能的提示词片段。
 func algorithmicArtPrompt(skillsDir string) string {
 	if skillsDir != "" {
 		skill := filepath.Join(skillsDir, AlgorithmicArtSkillName)
@@ -422,7 +393,7 @@ func algorithmicArtPrompt(skillsDir string) string {
 // textToLottiePrompt 是 Lottie 图层技能的提示词片段。
 //
 // Lottie 是可选项而非默认项：烘进 JSON 的东西后期改不动，且文字与数据类动画
-// 交给 Lottie 会与动效 rule 体系给出互相冲突的指令。因此这里的措辞必须把
+// 交给 Lottie 会与 HTML 动效要求给出互相冲突的指令。因此这里的措辞必须把
 // 「默认不用」和「不计入动效预算」两条写死，否则渲染器会拿一个 Lottie 顶替
 // 整镜头的动效工作量。
 func textToLottiePrompt(skillsDir string) string {
@@ -442,8 +413,8 @@ func textToLottiePrompt(skillsDir string) string {
 		"- 默认不用 Lottie。只有矢量图形、时间线自成一体、且用 CSS/GSAP 表达明显更笨重时才考虑，" +
 		"典型是 logo 演绎、图标变形、loader、状态反馈、SVG 描边绘制、矢量质感特效。\n" +
 		"- 文字排版、逐字动画、数字滚动、图表、转场与运镜一律不得交给 Lottie，" +
-		"这些归 HTML 与动效 rule 体系。任何时候都不得产出铺满画幅、承担镜头全部内容的 Lottie。\n" +
-		"- Lottie 图层不计入上述动效预算的任何一条 rule，持续性环境动效也不得用 Lottie 循环顶替；" +
+		"这些归 HTML 与上面的动效要求。任何时候都不得产出铺满画幅、承担镜头全部内容的 Lottie。\n" +
+		"- Lottie 图层不计入上述动效要求的任何一条，持续性环境动效也不得用 Lottie 循环顶替；" +
 		"HTML 侧必须独立满足全部动效要求。\n" +
 		"- Lottie 由渲染框架逐帧 seek：播放器实例 autoplay 与 loop 均为 false 并注册到框架约定的全局数组，" +
 		"JSON 内不得使用表达式、时钟或未播种随机，粒子与物理一类系统必须烘成关键帧。\n"
@@ -509,7 +480,7 @@ func songExplainerPrompt(dir string) string {
 //
 // 命令与提示词、镜头锁定文件要求的完全一致：CLI 必须带固定版本前缀，
 // ls / ffprobe 用来查素材与产物。技能树在项目根的 .agents/skills，位于镜头
-// 目录之外，不开放读取的话渲染器读不到动效 rule 索引，只能凭空写动画。
+// 目录之外，不开放读取的话渲染器读不到组合契约与动效手法，只能凭空写动画。
 func RendererAccess(resolved map[string]string) tools.RendererAccess {
 	seen := map[string]bool{}
 	var dirs []string

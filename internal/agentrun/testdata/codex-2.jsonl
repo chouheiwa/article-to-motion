@@ -1,0 +1,4 @@
+{"type": "thread.started", "thread_id": "01a19706-15cc-7c23-92b3-d0008785ee57"}
+{"type": "turn.started"}
+{"type": "item.completed", "item": {"id": "item_0", "type": "agent_message", "text": "PELICAN"}}
+{"type": "turn.completed", "usage": {"input_tokens": 62449, "cached_input_tokens": 44928, "cache_write_input_tokens": 0, "output_tokens": 62, "reasoning_output_tokens": 0}}

@@ -47,9 +47,13 @@ const SkillsSubdir = ".agents/skills"
 // PinnedVersion 是 am init 安装的 HyperFrames 上游版本。
 //
 // 固定版本不自动前进是刻意的：技能内容变化会直接改变成片动效。升级前要对比
-// 两版 skills/ 树与自动内联字体清单（@fontsource 包集合），确认动效 rule 与
-// 字体清单没变，并同步 internal/validate 的 autoEmbeddedFonts 注释、
-// internal/scene 的动效分类注释。
+// 两版 skills/ 树与自动内联字体清单（CANONICAL_FONTS），确认 internal/scene
+// 注册的技能与提示词点名的参考文件都还在、字体清单没变，并同步
+// internal/validate 的 autoEmbeddedFonts 注释。
+//
+// 0.8.14 → 0.8.225 是一次结构性升级：0.8.185 起上游把 hyperframes-animation、
+// hyperframes-core、hyperframes-creative 等技能并进入口技能 hyperframes，原子
+// rule 索引随之消失，internal/scene 的注册与提示词片段因此重写过一遍。
 //
 // ⚠️ 这个版本号固定的是 CLI 二进制，不是技能内容：上游 `hyperframes skills`
 // 直接 git clone 仓库默认分支取 skills/，安装器没有任何指定 ref 的口子。
@@ -60,7 +64,7 @@ const SkillsSubdir = ".agents/skills"
 // 这里是唯一来源：命令行、错误信息、--help 与下发提示词里的锁定指令都从它
 // 取值（提示词经 internal/preset/gen 的 {{HYPERFRAMES_VERSION}} 占位符注入，
 // 由根目录 assets_test.go 的 TestPresetsPinSameHyperFramesVersionAsBinary 守住）。
-const PinnedVersion = "0.8.14"
+const PinnedVersion = "0.8.225"
 
 // SkillsRepoURL 是上游技能的来源仓库。
 const SkillsRepoURL = "https://github.com/heygen-com/hyperframes.git"
@@ -69,7 +73,7 @@ const SkillsRepoURL = "https://github.com/heygen-com/hyperframes.git"
 //
 // 只钉 tag 不够：tag 可以被 force-push 移动，移动之后按 tag 克隆会静默拿到
 // 另一份技能而版本号一个字没变。解析出的 commit 与这里对不上就拒装。
-const PinnedSkillsCommit = "81069fe47f3107c494baa153013ba1d6f5e32ddc"
+const PinnedSkillsCommit = "b687d062353f2dd43a9a4b8b77aafeb1077b3875"
 
 // PinnedSkillsCount 是该 commit 上应当拼装出的技能数。
 //
@@ -77,12 +81,12 @@ const PinnedSkillsCommit = "81069fe47f3107c494baa153013ba1d6f5e32ddc"
 // 目录，这套拼装会静默少装一批——而渲染 agent 找不到技能不会报错，只会自己
 // 发明一套多半不挂在 paused timeline 上的写法。数量对不上就拒装，顺带让
 // 「升版本时顺手核对一遍」这件事自己会响。
-const PinnedSkillsCount = 26
+const PinnedSkillsCount = 14
 
 // skillsSubdirsInRepo 是上游仓库里存放技能的两个位置。
 //
-// 实测依据：按这两处筛出含 SKILL.md 的目录（20 + 6），与上游安装器
-// `hyperframes skills` 在同一个 commit 上的产出逐字节相同。
+// 实测依据：0.8.14 时按这两处筛出含 SKILL.md 的目录（20 + 6），与上游安装器
+// `hyperframes skills` 在同一个 commit 上的产出逐字节相同；0.8.225 上是 8 + 6。
 var skillsSubdirsInRepo = []string{"skills", filepath.ToSlash(SkillsSubdir)}
 
 // manifestFile 是判定一个目录是不是技能的依据，与 scene 包一致。
@@ -92,7 +96,7 @@ const manifestFile = "SKILL.md"
 type Options struct {
 	// ProjectDir 是用户项目根目录。
 	ProjectDir string
-	// Version 是要安装的上游版本，例如 "0.8.14"。技能按 tag v<Version> 克隆。
+	// Version 是要安装的上游版本，例如 "0.8.225"。技能按 tag v<Version> 克隆。
 	Version string
 	// RepoURL 是技能来源仓库，留空取 SkillsRepoURL。测试用它指向本地夹具仓库。
 	RepoURL string

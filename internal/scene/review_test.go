@@ -13,7 +13,7 @@ import (
 // 还与 frame.md 的 ambient_per_scene_max: 1 和风格说明书的稳定停留要求冲突。
 func TestAnimationPromptHasNoNumericQuotas(t *testing.T) {
 	for _, dir := range []string{"", "/proj/.agents/skills"} {
-		section := animationPrompt(dir)
+		section := hyperFramesPrompt(dir)
 		for _, banned := range []string{"至少组合 3 条", "3 个不同分类", "至少再动用 2 个属性", "45 帧", "贯穿整个镜头时长"} {
 			if strings.Contains(section, banned) {
 				t.Errorf("skillsDir=%q 时，动效提示词仍含配额 %q：\n%s", dir, banned, section)
@@ -55,24 +55,6 @@ func TestHyperFramesCLIPromptAllowsSnapshot(t *testing.T) {
 	}
 	if strings.Contains(section, "render、check、preview") {
 		t.Errorf("CLI 提示词仍把 preview 列为可用命令：\n%s", section)
-	}
-}
-
-// TestHyperFramesCreativePromptStaysWithinSingleScene：上游 creative 技能还覆盖
-// 整片节拍；本项目只把它当作可选的单镜头构图参考，视觉方向保持自由。
-func TestHyperFramesCreativePromptStaysWithinSingleScene(t *testing.T) {
-	for _, dir := range []string{"", "/proj/.agents/skills"} {
-		section := hyperFramesCreativePrompt(dir)
-		for _, want := range []string{"house-style.md", "video-composition.md", "design-adherence.md", "可选的构图参考", "配色、字体、版式与动效由当前镜头自主决定", "不做整片规划"} {
-			if !strings.Contains(section, want) {
-				t.Errorf("skillsDir=%q 时，creative 提示词缺少 %q：\n%s", dir, want, section)
-			}
-		}
-		for _, banned := range []string{"不另选色板", "design-picker", "以视觉规范为准"} {
-			if strings.Contains(section, banned) {
-				t.Errorf("skillsDir=%q 时，creative 提示词仍限制视觉选择 %q：\n%s", dir, banned, section)
-			}
-		}
 	}
 }
 

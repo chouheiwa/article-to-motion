@@ -31,7 +31,7 @@ go vet ./...
 
 `assets/shared/.agents/skills/<name>/` 是随 `am init` 下发到用户项目根 `.agents/skills/` 的技能树。`scene.ResolveSkill` 从镜头目录逐级向上找 `.agents/skills`，落到项目根就能被发现，用户无需另行安装。
 
-`hyperframes-animation` 等官方技能不在这棵树里，但**落点相同**：`am init` 通过 `internal/hyperframes` 把它们按固定版本装进同一个 `.agents/skills/`。这棵源树只放本仓库自带的技能。
+`hyperframes`、`hyperframes-cli` 等官方技能不在这棵树里，但**落点相同**：`am init` 通过 `internal/hyperframes` 把它们按固定版本装进同一个 `.agents/skills/`。这棵源树只放本仓库自带的技能。
 
 官方技能不能直接跑 `npx hyperframes skills` 装——上游安装器只认 `homedir()`，没有任何选项能改落点（`skills update --dir` 的帮助原文写着 "scopes the prune, not the install"）。装在机器级会让项目之间互相覆盖：一台机器只有一份技能，项目 A 与项目 B 固定不同版本时谁后初始化谁说了算。
 
@@ -70,11 +70,10 @@ go vet ./...
 
 注册上游技能时要收窄范围，上游技能的职责范围通常比单镜头渲染大得多：
 
-- `hyperframes-core` 同时覆盖建子项目与 `STORYBOARD.md` / `SCRIPT.md` 计划格式，那是整片工作流。分镜由上层决定并已写进 `scene.json`，不收窄的话渲染器会产出计划文件并试图自己排布多镜头。
-- `hyperframes-creative` 同时覆盖选色板、选字体、`design-picker` 与整片旁白/节拍规划。本项目配色与字体由 `frame.md` 锁定，只让渲染器读构图与密度（`house-style.md`、`video-composition.md`）和写完后的对照清单（`design-adherence.md`）。
-- `hyperframes-cli` 覆盖 `cloud` / `cloudrun` / `lambda` / `publish` 远端渲染路径，以及 `skills` / `upgrade` 这类改动已装技能的命令。前者绕开本机确定性前提，后者会顶掉固定版本、影响同项目其他镜头。
+- `hyperframes` 是入口技能，0.8.185 起上游把 `hyperframes-animation`、`hyperframes-core`、`hyperframes-creative` 并进了它，组合契约（`SKILL.md` 的 Contract、`references/format.md`）与动效手法（`references/motion.md`）都只在这里。它的本职却是整片制作：故事线三选一、`SPEC.md`、分镜、配乐音效、预览审批、桌面应用交接与 `REVIEW.md`。分镜由上层决定并已写进 `scene.json`，不收窄的话渲染器会产出计划文件、给镜头配乐（产物必须无音轨），还会停下来等人审批。另有两处与本项目正面冲突，要点名覆盖：`references/look.md` 让渲染器把项目根的 `frame.md` 当作配色与字体规范，而本项目的 `frame.md` 不是视觉命令；`references/format.md` 允许 `local()` 引用本机字体，换一台机器渲染结果就不同。
+- `hyperframes-cli` 覆盖 `cloud` / `cloudrun` / `lambda` / `publish` 远端渲染路径，`skills` / `upgrade` 这类改动已装技能的命令，以及 `preview` / `open` / `catch-up` / `history` / `feedback` / `usage` 这类交互、桌面应用与遥测命令。第一类绕开本机确定性前提，第二类会顶掉固定版本、影响同项目其他镜头，第三类在无头渲染里要么卡住等人，要么往外发数据。`timeline` 只放行只读的 `--json`，它的改写子命令与「时长由 `scene.json` 决定」冲突。
 
-这两条禁令只存在于我们自己写的提示词片段里，上游不会替我们守，所以 `skills_test.go` 有对应的门禁盯着。**入口技能 `hyperframes` 刻意不注册**：它的职责是「选择并安装 owning workflow」，会把渲染器往整片制作上带。
+这些禁令只存在于我们自己写的提示词片段里，上游不会替我们守，所以 `skills_test.go` 有对应的门禁盯着。`hyperframes` 的 `RequiredFiles` 包含提示词点名的 `references/*.md`：用 0.8.14 初始化的旧项目里入口技能只有一页路由说明，按缺失处理并在渲染前告警，比把渲染器指向不存在的文件强。
 
 `internal/project/skilltree_test.go` 守着这条链：注册了但没随二进制下发、下发了但镜头目录找不到、技能目录缺 `SKILL.md`，都会失败。**这些失败必须修，不能豁免**——`ResolveSkill` 按设计在找不到技能时不报错只降级，没有这道门就会一路静默到成片质量变差才被发现。
 
@@ -195,21 +194,65 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 
 调试产生的单片内容留在仓库外，不要靠 `.gitignore` 遮掩——未跟踪文件同样会被这个测试扫到。
 
+## Studio
+
+`am studio`（`internal/studio`）是对话驱动的本地工作台，仿 OpenDesign：在项目目录里启动编排工具，把 `internal/agentrun` 的统一事件经 SSE 推给网页，多轮续接同一个 CLI 会话。「开始制作」与 `am run` 共用 `project.RunPrompt`。
+
+| 约定 | 原因 |
+|---|---|
+| Studio 自己不写项目文件；改动只来自一轮对话，或 `studioCommands` / 镜头渲染这类直接调 `am` 子命令的按钮 | 旧版自造过一套 Operation 类型，镜头动作、相机写进 `production/studio/*.json` 再注入渲染提示词，等于绕开项目文件的第二条编辑通道。不要再加回来：要改什么就让编排工具改项目文件 |
+| 每轮前后各扫一遍项目（`scanTree`），差异即本轮改动，回退按快照恢复 | 编排工具改了哪些文件只有事后比对才知道，工具调用事件并不可靠（Bash 里也能写文件） |
+| 回退时任一文件在本轮之后又变过，整体拒绝（`ConflictError`），不做部分回退 | 部分回退会留下一半新一半旧的项目，比不回退更难收拾 |
+| 文本按 sha256 存进 `production/studio/blobs/`；媒体扩展名、含 NUL、超过 2 MB 的只记 stat，列出但不回退 | 渲染产物每轮存一份不现实，重渲染即可 |
+| 项目级写锁（`acquire` / `release`）：一轮对话与渲染、拼接、复查等写任务互斥 | 否则任务写的文件会被算进那一轮的改动，回退时误删 |
+| 预先指定或从流里读到会话 id 立刻落盘；续接失败且没有任何产出时，带对话记录开新会话 | 进程中途崩了也能续接；CLI 会话过期是常态，不能让对话就此断掉 |
+| 会话、事件（`<id>.events.jsonl`，SSE 的 id 就是 seq）、轮次记录都在项目的 `production/studio/` 下 | 状态跟着项目走，`am archive` 一起归档；Studio 重启后进行中的轮次标成 `interrupted` |
+| 编排工具与渲染工具按会话选（`SessionMeta.Tool` / `Renderer`），默认取项目配置；Studio 不改 `article-to-motion.conf`，选择经 `sessionConfig` 覆盖后由 `ChildEnvironment` 写进子进程的 `ORCHESTRATOR` / `RENDERER` | 环境变量优先于项目配置，编排工具在这一轮里调用的 `am scene run` 因此也用会话选的渲染工具。换编排工具时清掉 CLI 会话 id，下一轮按续接失败的路子带上对话记录开新会话 |
+| 项目路径一律用 `currentProject()` 返回的（已 `EvalSymlinks`） | macOS 的 `/var` 是 `/private/var` 的链接，两种写法会被当成两个项目，锁和会话都对不上 |
+| `/api/files` 与 `/preview/scenes/` 经 `containedPath` 解析（含符号链接），`.env` 一律不读 | 默认只监听回环地址，但手机经隧道访问时这两个接口就是对外的 |
+
+### 前端
+
+源码在 `internal/studio/ui/`（Vite + TypeScript + Preact），`npm run build` 写进 `internal/studio/web/`，由 `//go:embed web` 打进二进制。
+
+| 约定 | 原因 |
+|---|---|
+| 构建产物提交进仓库，改了 `ui/src` 必须重新构建并一起提交 | 只改 Go 的人和 `go install` 的用户不需要 Node。CI 的 `studio-ui` job 重新构建后 `git diff internal/studio/web` 必须为空 |
+| 产物文件名固定（`assets/app.js`、`assets/index.css`），不带 hash | 带 hash 的话每次改动都换文件名，产物 diff 难读；`index.html` 发 `no-cache`，不靠文件名破缓存 |
+| `static` 只把不带扩展名的路径回落到 `index.html`，带扩展名找不到直接 404；JS 按扩展名设 MIME | 缺失的脚本拿到一份 HTML，浏览器只报模块 MIME 错误，看不出真正原因 |
+| `package-lock.json` 里的地址是 `registry.npmjs.org` | 用镜像装完依赖要把 `resolved` 换回官方源再提交，CI 访问不到国内镜像 |
+| `ui/src/types.ts` 与后端 JSON 字段一一对应 | 前后端之间没有生成代码，改字段两边一起改 |
+
+`internal/studio/ui/e2e/fake-bin/claude` 是 e2e 用的假编排工具（同目录的 `codex` 只用来显示为「已安装」，被调用时直接失败），`ui/playwright.config.mjs` 只给 Studio 服务进程的 PATH 加上它；提示词里带「慢慢来」时它只回报会话然后挂起，供取消测试使用。单元测试里的假工具同理，子进程环境按安全模式白名单构造，测试开关要经 `AM_PASSTHROUGH_ENV` 透传。
+
 ## 新增一个 AI CLI
 
-工具矩阵散落在四个文件，加一个工具必须五处同步改，漏一处会在运行期才炸：
+工具矩阵散落在六个文件，加一个工具必须八处同步改，漏一处会在运行期才炸：
 
 | 位置 | 作用 |
 |---|---|
 | `internal/tools/tools.go` `RendererInvocation` | 单镜头渲染的命令行与非交互权限模式；该模式若拦截 Bash，要把 `RendererAccess` 译成该工具的放行配置（claude 用 `--settings`） |
-| `internal/tools/tools.go` `OrchestratorInvocation` | 编排调用的命令行与 prompt 传递方式（stdin 还是参数） |
+| `internal/tools/tools.go` `OrchestratorInvocation` | 编排调用的命令行、prompt 传递方式（stdin 还是参数）、结构化输出参数、会话参数（新会话 / 续接），以及把 `OrchestratorAccess` 译成该工具的白名单 |
+| `internal/tools/tools.go` `PresetSessionID` | 该工具能否由调用方预先指定新会话 id；不能的（codex、opencode）要从输出流的第一条事件里读 |
+| `internal/agentrun/parse.go` | 把该工具的结构化流译成统一事件；先录一份真实的两轮输出放进 `testdata/`，`TestRecordedStreams` 加一行 |
 | `internal/config/config.go` `validTools` | `ORCHESTRATOR` / `RENDERER` 取值校验 |
 | `internal/scene/scene.go` `validRenderer` | `scene.json` 的 `renderer` 字段校验 |
 | `internal/scene/skills.go` `rendererSkillDirs` | 该工具的技能目录约定（家目录级与项目级） |
+| `internal/studio/agents.go` `agentOrder` | Studio 工具选择里的展示名与顺序，`TestAgentOrderCoversValidTools` 守着与 `validTools` 一致 |
 
 同时更新 `assets/shared/article-to-motion.conf`、`assets/shared/.env.example`、`README.md`、`README.en.md` 里的可选值注释。
 
 安全模式的权限模式必须实测能跑通渲染命令。claude 的 `acceptEdits` 只自动批准文件编辑、拦下所有 Bash，而 `-p` 下没人批准，渲染器会执行不了 `npx hyperframes render`；`scene.RendererAccess` 列出要放行的最小命令集（带固定版本的 hyperframes、`ls`、`ffprobe`）与技能目录读取，`.env` 始终禁读。
+
+编排工具同理，`config.Config.OrchestratorAccess` 列出它要放行的命令：基础命令加当前 TTS 与对齐工具各自的那一个命令（`providers.go` 的 `Command` 字段）。各家的权限模式实测结果不同，改之前先读 `OrchestratorInvocation` 的注释：qoder 的 `dont_ask` 连写文件都拒；codex 没有命令白名单，靠沙箱，而沙箱默认断网会让 TTS 失败；opencode 2.x 只读项目目录里的 `opencode.json`，规则集拦不住命令，写成全拒时无头运行会直接挂起，所以安全模式下不加限制，README 里写明了。
+
+改了任何一家的调用参数或解析器，都要在本机跑一遍真实 CLI 集成测试：
+
+```bash
+AM_TEST_AGENT_TOOLS=claude,codex,qoder,codebuddy,opencode go test ./internal/agentrun -run RealCLI -v
+```
+
+它对每家跑两轮，第二轮续接后要答出第一轮让它记住的词。每次都是真实模型调用，CI 不跑。
 
 ## 新增一个 TTS 或对齐工具
 
@@ -217,7 +260,7 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 
 | 位置 | 作用 |
 |---|---|
-| `internal/config/providers.go` | 取值、名称、自带时间戳粒度 |
+| `internal/config/providers.go` | 取值、名称、自带时间戳粒度、命令名（安全模式下编排工具只被放行这一个命令） |
 | `internal/preset/gen/templates/PROMPT-PRODUCTION.md` 第三、四阶段 | 安装、登录、合成与取时间戳的具体命令，改完跑 `go generate` |
 | `assets/shared/article-to-motion.conf`、`.env.example`、两份 README | 可选值注释 |
 

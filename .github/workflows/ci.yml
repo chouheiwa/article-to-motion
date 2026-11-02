@@ -11,9 +11,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  studio-ui:
+    name: Studio UI build is committed
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: internal/studio/ui
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: internal/studio/ui/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+      # internal/studio/web 是 go:embed 进二进制的构建产物，必须与 ui/src 一致。
+      - name: Verify committed build output
+        run: git diff --exit-code -- ../web && test -z "$(git status --porcelain -- ../web)"
+
   studio-e2e:
     name: Studio browser E2E
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: internal/studio/ui
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -23,14 +46,14 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: internal/studio/ui/package-lock.json
       - name: Install Playwright
-        working-directory: internal/studio/e2e
-        run: npm install --no-audit --no-fund && npx playwright install --with-deps chromium
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
       - name: Run Studio browser flow
-        working-directory: internal/studio/e2e
         env:
           AM_STUDIO_E2E_CONFIG: ${{ runner.temp }}/am-studio-projects.json
-        run: npm test
+        run: npm run test:e2e
 
   test:
     name: test (${{ matrix.os }})

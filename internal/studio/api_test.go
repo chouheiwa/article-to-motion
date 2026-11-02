@@ -2,7 +2,6 @@ package studio
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -202,6 +201,9 @@ func TestStudioDirectoryAndProjectLifecycle(t *testing.T) {
 	if body["current_project_id"] != "" || len(studioList(t, body["projects"])) != 0 {
 		t.Fatalf("initial projects = %#v", body)
 	}
+	if _, ok := body["projects"].([]any); !ok {
+		t.Fatalf("没有项目时 projects 要是空数组，不能是 null: %#v", body["projects"])
+	}
 	status, body = studioRequest(t, http.MethodGet, ts.URL+"/api/workspaces/current", "")
 	requireStudioStatus(t, status, http.StatusOK, body)
 	if body["project"] != nil {
@@ -212,20 +214,20 @@ func TestStudioDirectoryAndProjectLifecycle(t *testing.T) {
 		status, body = studioRequest(t, http.MethodGet, ts.URL+path, "")
 		requireStudioStatus(t, status, http.StatusNotFound, body)
 	}
-	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/chat", "{}")
-	requireStudioStatus(t, status, http.StatusNotFound, body)
 	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/render/all", "")
 	requireStudioStatus(t, status, http.StatusNotFound, body)
 	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/review/run", "")
 	requireStudioStatus(t, status, http.StatusNotFound, body)
+	for _, path := range []string{"/api/sessions", "/api/files?path=a", "/api/skills"} {
+		status, body = studioRequest(t, http.MethodGet, ts.URL+path, "")
+		requireStudioStatus(t, status, http.StatusNotFound, body)
+	}
+	for _, path := range []string{"/api/production/start", "/api/commands/project.concat", "/api/sessions/s-1/turns"} {
+		status, body = studioRequest(t, http.MethodPost, ts.URL+path, "{}")
+		requireStudioStatus(t, status, http.StatusNotFound, body)
+	}
 	status, body = studioRequest(t, http.MethodGet, ts.URL+"/api/tasks", "")
 	requireStudioStatus(t, status, http.StatusOK, body)
-	status, body = studioRequest(t, http.MethodGet, ts.URL+"/api/operations", "")
-	requireStudioStatus(t, status, http.StatusOK, body)
-	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/operations/preview", "{}")
-	requireStudioStatus(t, status, http.StatusBadRequest, body)
-	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/operations/execute", "{}")
-	requireStudioStatus(t, status, http.StatusBadRequest, body)
 
 	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/projects/open", "{")
 	requireStudioStatus(t, status, http.StatusBadRequest, body)
@@ -495,10 +497,11 @@ func TestStudioContentAndTaskEndpoints(t *testing.T) {
 		t.Fatalf("issues = %#v", issues)
 	}
 
+	// 有了成片才进复查；只跑过 run-all、还有镜头没出片时仍在渲染阶段。
 	writeStudioFile(t, filepath.Join(root, "production", "run-report.json"), "{}")
 	status, body = studioRequest(t, http.MethodGet, ts.URL+"/api/state", "")
 	requireStudioStatus(t, status, http.StatusOK, body)
-	if body["stage"] != "review" {
+	if body["stage"] != "render" {
 		t.Fatalf("stage after run report = %#v", body)
 	}
 
@@ -546,11 +549,6 @@ func TestStudioContentAndTaskEndpoints(t *testing.T) {
 	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/tasks", "")
 	requireStudioStatus(t, status, http.StatusMethodNotAllowed, body)
 
-	status, body = studioRequest(t, http.MethodGet, ts.URL+"/api/operations", "")
-	requireStudioStatus(t, status, http.StatusOK, body)
-	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/operations", "")
-	requireStudioStatus(t, status, http.StatusMethodNotAllowed, body)
-
 	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/review/run", "")
 	requireStudioStatus(t, status, http.StatusAccepted, body)
 	reviewTask := waitStudioTask(t, ts, body["task_id"].(string))
@@ -575,147 +573,14 @@ func TestStudioContentAndTaskEndpoints(t *testing.T) {
 	if body["code"] != "not_found" {
 		t.Fatalf("missing API = %#v", body)
 	}
+	// 带扩展名却不存在的文件直接 404：回落成 HTML 的话，浏览器只会报一个难懂的 MIME 错误。
 	status, raw = rawStudioGet(t, ts.URL+"/missing-asset.js")
+	if status != http.StatusNotFound {
+		t.Fatalf("missing asset = %d %q", status, raw)
+	}
+	// 不带扩展名的路径是前端路由，回落到 index.html。
+	status, raw = rawStudioGet(t, ts.URL+"/some/route")
 	if status != http.StatusOK || !strings.Contains(raw, "ArticleToMotion") {
 		t.Fatalf("static fallback = %d %q", status, raw)
-	}
-}
-
-func TestStudioChatEndpoints(t *testing.T) {
-	root := t.TempDir()
-	writeStudioFile(t, filepath.Join(root, "scenes", "scene-001", "scene.json"), `{"id":"scene-001","duration_seconds":1,"output":"out.mp4","text":"old"}`)
-	s, ts := startStudio(t, Config{ProjectPath: root, ConfigPath: filepath.Join(t.TempDir(), "projects.json")})
-
-	status, body := studioRequest(t, http.MethodGet, ts.URL+"/api/chat", "")
-	requireStudioStatus(t, status, http.StatusMethodNotAllowed, body)
-	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/chat", "{")
-	requireStudioStatus(t, status, http.StatusBadRequest, body)
-	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/chat", "{}")
-	requireStudioStatus(t, status, http.StatusBadRequest, body)
-	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/chat", `{"message":"hi","conversation_id":"missing"}`)
-	requireStudioStatus(t, status, http.StatusNotFound, body)
-
-	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/chat", `{"message":"password: hunter2"}`)
-	requireStudioStatus(t, status, http.StatusOK, body)
-	conversation := body["conversation"].(map[string]any)
-	conversationID := conversation["conversation_id"].(string)
-	messages := studioList(t, conversation["messages"])
-	if !strings.Contains(messages[0].(map[string]any)["content"].(string), "password=[REDACTED]") {
-		t.Fatalf("redacted conversation = %#v", conversation)
-	}
-	if !strings.Contains(body["message"].(string), "我已收到") {
-		t.Fatalf("generic reply = %#v", body)
-	}
-
-	status, body = studioRequest(t, http.MethodGet, ts.URL+"/api/chat/"+conversationID, "")
-	requireStudioStatus(t, status, http.StatusOK, body)
-	if body["conversation_id"] != conversationID {
-		t.Fatalf("conversation = %#v", body)
-	}
-	status, raw := rawStudioGet(t, ts.URL+"/api/chat/"+conversationID+"?stream=1")
-	if status != http.StatusOK || !strings.Contains(raw, "event: chat.message") {
-		t.Fatalf("chat stream = %d %q", status, raw)
-	}
-	status, raw = rawStudioGet(t, ts.URL+"/api/chat/"+conversationID+"?stream=1&follow=1")
-	if status != http.StatusOK || !strings.Contains(raw, "event: chat.message") {
-		t.Fatalf("chat follow = %d %q", status, raw)
-	}
-	status, body = studioRequest(t, http.MethodGet, ts.URL+"/api/chat/missing", "")
-	requireStudioStatus(t, status, http.StatusNotFound, body)
-
-	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/chat", `{"message":"字幕：新字幕","scene_id":"scene-001"}`)
-	requireStudioStatus(t, status, http.StatusOK, body)
-	preview, ok := body["operation_preview"].(map[string]any)
-	if !ok || preview["operation"] == nil {
-		t.Fatalf("caption preview = %#v", body)
-	}
-
-	installFakeCodex(t)
-	t.Setenv("AM_STUDIO_AI_TOOL", "codex")
-	t.Setenv("ORCHESTRATOR", "codex")
-	t.Setenv("RENDERER", "claude")
-	status, body = studioRequest(t, http.MethodPost, ts.URL+"/api/chat", `{"message":"请分析这个镜头","scene_id":"scene-001"}`)
-	requireStudioStatus(t, status, http.StatusOK, body)
-	if !strings.Contains(body["message"].(string), "AI 已收到请求") {
-		t.Fatalf("ai reply = %#v", body)
-	}
-	aiConversation := body["conversation"].(map[string]any)["conversation_id"].(string)
-	waitForAIChat(t, ts)
-	status, body = studioRequest(t, http.MethodGet, ts.URL+"/api/chat/"+aiConversation, "")
-	requireStudioStatus(t, status, http.StatusOK, body)
-	foundReply := false
-	for _, item := range studioList(t, body["messages"]) {
-		if item.(map[string]any)["content"] == "fake reply" {
-			foundReply = true
-		}
-	}
-	if !foundReply {
-		t.Fatalf("ai conversation = %#v", body)
-	}
-	s.features.mu.RLock()
-	proposed := 0
-	for _, op := range s.features.operations {
-		if op.Type == "scene.capture_frames" {
-			proposed++
-		}
-	}
-	s.features.mu.RUnlock()
-	if proposed == 0 {
-		t.Fatal("AI operation was not registered")
-	}
-
-	if err := s.runAIChat(context.Background(), aiConversation, "unknown-tool", "scene-001", "hi", nil, nil); err == nil {
-		t.Fatal("unknown tool should fail")
-	}
-	t.Setenv("ORCHESTRATOR", "")
-	t.Setenv("RENDERER", "")
-	if err := s.runAIChat(context.Background(), aiConversation, "codex", "scene-001", "hi", nil, nil); err == nil {
-		t.Fatal("invalid project config should fail")
-	}
-}
-
-func installFakeCodex(t *testing.T) {
-	t.Helper()
-	dir := t.TempDir()
-	script := `#!/bin/sh
-cat >/dev/null
-printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"[[USER_MESSAGE]]fake reply"}}'
-printf '%s\n' '[[AM_OPERATION]] {"type":"scene.capture_frames","scene_id":"scene-001"}'
-`
-	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
-
-func waitForAIChat(t *testing.T, ts *httptest.Server) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		status, body := studioRequest(t, http.MethodGet, ts.URL+"/api/tasks", "")
-		if status == http.StatusOK {
-			for _, item := range studioList(t, body["tasks"]) {
-				task := item.(map[string]any)
-				if task["type"] == "ai.chat" && task["status"] == "succeeded" {
-					return
-				}
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("AI chat task did not finish")
-}
-
-func TestRedactSecrets(t *testing.T) {
-	cases := map[string]string{
-		"api_key=abc":     "api_key=[REDACTED]",
-		"TOKEN: xyz":      "TOKEN=[REDACTED]",
-		"password = pass": "password=[REDACTED]",
-		"nothing secret":  "nothing secret",
-	}
-	for input, want := range cases {
-		if got := redactSecrets(input); got != want {
-			t.Fatalf("redactSecrets(%q) = %q, want %q", input, got, want)
-		}
 	}
 }

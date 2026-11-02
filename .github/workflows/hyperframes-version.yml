@@ -70,11 +70,12 @@ jobs:
 
           升级前必须人工比对，不要直接改常量：
 
-          1. 取两个版本的 \`skills/\` 树做 diff，确认动效 rule 的分类数与条数没变——
-             \`internal/scene/skills.go\` 的 \`animationPrompt\` 里写死了分类列表，
-             没有任何测试能守住它与上游 \`rules-index.md\` 的一致性。
-          2. 比对 \`fontData.generated.ts\` 的字节数，确认自动内联字体清单没变，
-             并同步 \`internal/validate\` 的 \`autoEmbeddedFonts\` 注释。
+          1. 取两个版本的 \`skills/\` 树做 diff，确认 \`internal/scene/skills.go\` 注册的技能
+             与提示词点名的文件（\`hyperframes\` 的 \`references/format.md\`、\`motion.md\`、
+             \`runtimes.md\`、\`look.md\`）都还在，并重读入口技能的 Contract 与 Work loop，
+             看有没有新的整片流程、交互命令或外发服务需要在提示词里挡掉。
+          2. 比对 \`packages/core/src/fonts/deterministicFonts.ts\` 的 \`CANONICAL_FONTS\`，
+             确认自动内联字体清单没变，并同步 \`internal/validate\` 的 \`autoEmbeddedFonts\` 注释。
           3. 改 \`internal/hyperframes/hyperframes.go\` 的 \`PinnedVersion\`（唯一来源），
              同时更新 \`PinnedSkillsCommit\`（新 tag 指向的 commit）与 \`PinnedSkillsCount\`，
              再跑 \`go generate ./internal/preset/\` 更新下发提示词里的版本号。

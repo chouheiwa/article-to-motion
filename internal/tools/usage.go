@@ -23,9 +23,15 @@ func (u Usage) Empty() bool { return u.Source == "" }
 //   - claude 系（stream-json）：收尾的 {"type":"result"} 事件带整次调用的
 //     usage、total_cost_usd 与 num_turns，是累计值，以最后一条为准。
 //   - codex（exec --json）：每轮结束的 {"type":"turn.completed"} 带该轮 usage，逐轮相加。
+//   - opencode（run --format json）：每步结束的 {"type":"step_finish"} 在 part 里带
+//     该步的 tokens 与 cost，逐步相加（2026-11 用 v2.1.0 实测）。
 //
 // 其他工具读不到就留空，尝试记录里照常写耗时。
 func AccumulateUsage(tool, line string, u *Usage) {
+	if tool == "opencode" {
+		accumulateOpencodeUsage(line, u)
+		return
+	}
 	var event struct {
 		Type  string   `json:"type"`
 		Cost  *float64 `json:"total_cost_usd"`
@@ -56,4 +62,35 @@ func AccumulateUsage(tool, line string, u *Usage) {
 		u.Turns = event.Turns
 		u.Source = tool + " result"
 	}
+}
+
+func accumulateOpencodeUsage(line string, u *Usage) {
+	var event struct {
+		Type string `json:"type"`
+		Part struct {
+			Cost   *float64 `json:"cost"`
+			Tokens *struct {
+				Input  int64 `json:"input"`
+				Output int64 `json:"output"`
+				Cache  struct {
+					Read int64 `json:"read"`
+				} `json:"cache"`
+			} `json:"tokens"`
+		} `json:"part"`
+	}
+	if json.Unmarshal([]byte(line), &event) != nil || event.Type != "step_finish" || event.Part.Tokens == nil {
+		return
+	}
+	u.InputTokens += event.Part.Tokens.Input
+	u.OutputTokens += event.Part.Tokens.Output
+	u.CachedInputTokens += event.Part.Tokens.Cache.Read
+	if event.Part.Cost != nil {
+		total := *event.Part.Cost
+		if u.CostUSD != nil {
+			total += *u.CostUSD
+		}
+		u.CostUSD = &total
+	}
+	u.Turns++
+	u.Source = "opencode step_finish"
 }

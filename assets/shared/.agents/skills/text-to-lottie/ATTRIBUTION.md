@@ -23,7 +23,7 @@
 
 - `player-contract.md` —— 整份是上游那个 Vite + Skia Skottie 播放器项目的契约（场景放在 `public/projects/<project>/<scene-N>/`、起 dev server、读 `GET /__context`、浏览器 `?frame=N` 逐帧看）。本项目的镜头是 HyperFrames 组合，由 `am scene run` 无头渲染，这套契约整体不适用。
 - `evals/` —— 上游维护它自己那份 SKILL.md 的回归用例，对使用者无意义。
-- `recipe-typography.md`、`recipe-data-stats.md`、`recipe-product-promo.md`、`recipe-camera-scene-motion.md`、`recipe-diagram-technical.md`、`recipe-lower-thirds.md`、`chapterization-transition-grammar.md`、`recipe-starter-projects.md` —— 这些是「整个镜头就是一个 Lottie」尺度的配方。本项目把 Lottie 定位成镜头里的元素，整镜头的文字排版、数据统计、转场语法由 `hyperframes-animation` 的 rule 体系负责，两边都写会给出互相冲突的指令。
+- `recipe-typography.md`、`recipe-data-stats.md`、`recipe-product-promo.md`、`recipe-camera-scene-motion.md`、`recipe-diagram-technical.md`、`recipe-lower-thirds.md`、`chapterization-transition-grammar.md`、`recipe-starter-projects.md` —— 这些是「整个镜头就是一个 Lottie」尺度的配方。本项目把 Lottie 定位成镜头里的元素，整镜头的文字排版、数据统计、转场语法由 HyperFrames 官方技能负责（0.8.14 时是 `hyperframes-animation` 的 rule 体系，0.8.185 起并进 `hyperframes` 的 `references/motion.md`），两边都写会给出互相冲突的指令。
 
 ## 对保留文件的改动
 

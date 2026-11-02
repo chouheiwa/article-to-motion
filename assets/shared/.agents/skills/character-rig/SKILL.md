@@ -31,7 +31,7 @@ HyperFrames 是单条 paused timeline + 逐帧 seek 出帧。不受那条 timeli
 | `tl.seek(3.0, false)` | 正常出帧 |
 | `tl.time(3.0)` / `tl.progress(p)` | 正常出帧 |
 
-`cast.js` 为此做了两层保险（照上游官方示例 `hyperframes-animation/examples/messaging-multi-phrase.html`）：
+`cast.js` 为此做了两层保险（照 HyperFrames 0.8.14 的上游官方示例 `hyperframes-animation/examples/messaging-multi-phrase.html`，该目录 0.8.185 起已被上游并掉）：
 一条覆盖全片的驱动 tween，加上对 `window.__hf` / `window.__player` 的 `seek` 与 timeline 自身
 `seek` 的转发包装。所以即使宿主用默认参数 seek，角色照样出帧。**但你自己写的 tween 没有这层保险**
 ——预览与自检一律用 `tl.time(t)`。

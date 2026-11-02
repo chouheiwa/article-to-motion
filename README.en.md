@@ -39,7 +39,7 @@ Non-interactive environments (CI, pipes) must pass `--canvas` explicitly; there 
 
 ### Local Studio workspace
 
-Launch the local web workspace to inspect project status and scenes:
+Launch the local web workspace to drive production through chat and preview scenes in the browser:
 
 ```bash
 am studio
@@ -49,15 +49,27 @@ am studio --listen 127.0.0.1:4317
 
 Studio listens on loopback by default. For phone access, use your own Tailscale, VPN, or SSH tunnel and explicitly choose a listen address; Studio does not provide public accounts or HTTPS.
 
-The workspace exposes project state, scenes, assets, script browsing, AI chat, reviewable operations, snapshots and undo, task progress, and review reports. Mutations require a preview and confirmation; the project files remain the source of truth used by the CLI.
+Chat is the main entry point. Studio starts the configured orchestrator (`ORCHESTRATOR`) in the project directory, streams its output to the page, and resumes the same CLI session across turns. "Start production" runs the same prompt as `am run`; you can keep refining in that session or open a new chat for local edits.
 
-The browser regression flow lives in `internal/studio/e2e/` and requires Node.js 22+:
+- **Studio never edits project files itself.** Changes come only from an orchestrator turn or from buttons that call `am` subcommands directly (render, concat, validate, review, confirm the beat grid).
+- **Every turn can be reverted.** Studio snapshots the project before and after each turn, lists the files the turn changed, shows each file before and after, and can revert the whole turn. If any of those files changed again later, the revert is refused as a whole rather than applied partially. Media files and files over 2 MB are listed but not reverted; re-render instead.
+- **Tools per session.** The chat header picks the orchestrator and renderer for the session, defaulting to the project config; tools that are not installed cannot be picked. The choice applies to that session only and does not edit `article-to-motion.conf`. Switching the orchestrator mid-session starts a new CLI session on the next turn, seeded with the earlier transcript.
+- **One writer at a time.** While a turn runs, render and concat buttons report that the project is busy, and vice versa.
+- **Sessions survive restarts.** Sessions, events, and snapshots live under the project's `production/studio/`. If the CLI session cannot be resumed (for example it expired), Studio starts a new one seeded with the earlier transcript.
+
+`am --unsafe studio` disables permission isolation just like `am --unsafe run`; see safe mode below.
+
+The page has three panes: production stage, scenes, and the project file tree on the left; previews in the middle (scene output with frame stepping and region selection, the live scene composition with element picking, the final video, style examples, review contact sheets, and publish info); the chat on the right. A captured frame, a selected region, or a picked element can be attached to the next message. Beat-mode projects show the click track and a "confirm grid" button until the grid is confirmed.
+
+The frontend source lives in `internal/studio/ui/` (Vite + TypeScript + Preact). The build output is committed to `internal/studio/web/` and embedded with `go:embed`, so Go-only changes need no Node. Frontend changes need Node.js 22+:
 
 ```bash
-cd internal/studio/e2e
-npm install
+cd internal/studio/ui
+npm ci
+npm run dev        # dev server; API calls go to am studio on 127.0.0.1:4321
+npm run build      # writes ../web; commit it together with the source
 npx playwright install chromium
-AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm test
+AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm run test:e2e
 ```
 
 ### Visual direction
@@ -68,7 +80,7 @@ The project no longer presets or locks a visual style. Canvas, frame rate, and d
 
 The legacy `--style` flag is still accepted for old scripts, but it no longer imposes a visual requirement.
 
-`am init` refuses to overwrite existing files with different content. By default it installs the pinned HyperFrames 0.8.14 skills into the project's `.agents/skills/`, alongside the binary-delivered `text-to-lottie` and `algorithmic-art`; use `--skip-hyperframes` for offline or CI environments.
+`am init` refuses to overwrite existing files with different content. By default it installs the pinned HyperFrames 0.8.225 skills into the project's `.agents/skills/`, alongside the binary-delivered `text-to-lottie` and `algorithmic-art`; use `--skip-hyperframes` for offline or CI environments.
 
 Skills go into the project rather than `$HOME` because that is the only way projects stop clobbering each other: the upstream installer only honours `homedir`, so a machine has exactly one copy — with two projects pinned to different versions, whichever was initialized last wins. The install never writes to your HOME; the upstream installer runs in a temporary directory outside the project and its output is moved in.
 
@@ -156,6 +168,10 @@ Scenes render in isolation, so a chapter change used to hard-cut into an entirel
 Scenes with an accepted output and unchanged inputs are skipped. When an output passes verification, `am` records an input fingerprint in `.am-render.json` inside the scene directory, with a digest per item: the assembled render prompt, `scene.json`, `prompt.md`, the transcript, the style guide, cast packs, the renderer, skill contents, and the `am` version. Scenes whose inputs changed are marked stale, the report names the items that changed, and `--force` re-renders them; older outputs without a record still fall back to modification times. Every render attempt writes `render-<scene id>.attempt.json` (duration, outcome, exit code, and token usage when the stream reports it), and the previous output and logs are archived into `attempts/` before a re-render. Interruptions stop new tasks, terminate in-flight process groups, and write a partial report.
 
 AI CLIs run in project-scoped safe mode by default. `am --unsafe run` explicitly restores bypass/auto-approval behavior and should only be used for trusted projects. Extra environment variables in safe mode must be named in `AM_PASSTHROUGH_ENV`.
+
+In safe mode the orchestrator (`am run`) may edit files and run only an allowlist: `am`, `ffmpeg`, `ffprobe`, `ls`, `mkdir`, the pinned `npx --yes hyperframes@…`, and the single command of the configured `TTS_PROVIDER` and `ALIGN_PROVIDER` (for example `mmx`, `edge-tts`, `mlx_audio.stt.generate`; `funasr` maps to `python3`). Installers (`brew`, `pip`, `uv`, `npm`) are not allowed, so install those tools yourself first. Enforcement differs per tool: claude and codebuddy use `acceptEdits` plus a `--settings` allowlist with `.env` reads denied (Claude Code's `acceptEdits` also auto-approves filesystem commands such as `touch`, `mkdir`, and `rm` inside the workspace); qoder uses `accept_edits` plus one `--allowed-tools` per command; codex has no command allowlist and relies on its `workspace-write` sandbox, with sandbox networking enabled for TTS; opencode has no working allowlist mechanism and can run any command even in safe mode. The codebuddy arguments have not been fully tested.
+
+`am run` prints a readable digest of the orchestrator's event stream: the session id first, assistant text as-is, one line per tool call, failed tool results marked with `✗`, and token usage at the end.
 
 ## Multi-role narration
 

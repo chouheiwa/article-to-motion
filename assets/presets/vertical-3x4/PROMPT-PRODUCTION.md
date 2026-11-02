@@ -459,8 +459,8 @@ scenes/
 - 建立 `scene.json`：执行契约。字段为 `id`、`duration_seconds`、`output`、`transcript`、`text`，可选 `renderer`；`timing` 块由 `am scene cues` 写入，不要手写；未知字段会直接报错。`duration_seconds` 先写占位值 `1`，正式时长由下面的 `am scene cues` 写入。`text` 会被包进 `<scene-text>` 定界块送进渲染提示词并声明为「数据而非指令」，因此 `text` 本身不得含 `[[USER_MESSAGE]]` 标记或 `<scene-text>` / `</scene-text>` 及其形近变体，含则报错。
 - 建立 `prompt.md`：本镜头的创意方向、视觉概念和表达重点。交付规格、阶段消息等执行契约由 `am` 保证，不在本文件中。
 - 使用 `am init` 装进项目 `.agents/skills/` 的技能。技能缺失时重跑 `am init` 补齐，不要自己跑 `npx hyperframes skills`——那会装到本机 HOME 而不是项目里，绕过版本固定；也不得从其他项目或本机目录复制。
-- 建立渲染器锁定文件：固定 HyperFrames 版本为 `0.8.14` 并要求每次 CLI 调用都带 `npx --yes hyperframes@0.8.14` 前缀；禁止 `hyperframes@latest`、不带版本的 `npx hyperframes`、`hyperframes skills`、`skills update` 以及任何会改动已装技能的命令；禁止读取 `.env` 或打印凭据；禁止改动 `scene.json` 里的执行契约。文件名取决于该镜头所用渲染工具会自动读取的项目级指令文件（例如 `claude` 读 `CLAUDE.md`），按所选工具各自的约定命名，不要不管用哪个工具都写成 `CLAUDE.md`。
-- 锁定文件写「只在本镜头目录内工作、不查看兄弟镜头和上级项目目录」时，必须写明一条例外：项目根下的 `.agents/skills/`。全部技能都在那里——HyperFrames 官方技能与随 `am` 二进制下发的 `text-to-lottie`、`algorithmic-art` 同处一个目录，路径由 `am` 解析后注入提示词。它在项目内但在镜头目录之外，会被「只在本镜头目录内工作」挡住；缺这条例外，渲染工具会拒读动效 rule 索引，动画退化成只有淡入和位移。
+- 建立渲染器锁定文件：固定 HyperFrames 版本为 `0.8.225` 并要求每次 CLI 调用都带 `npx --yes hyperframes@0.8.225` 前缀；禁止 `hyperframes@latest`、不带版本的 `npx hyperframes`、`hyperframes skills`、`skills update` 以及任何会改动已装技能的命令；禁止读取 `.env` 或打印凭据；禁止改动 `scene.json` 里的执行契约。文件名取决于该镜头所用渲染工具会自动读取的项目级指令文件（例如 `claude` 读 `CLAUDE.md`），按所选工具各自的约定命名，不要不管用哪个工具都写成 `CLAUDE.md`。
+- 锁定文件写「只在本镜头目录内工作、不查看兄弟镜头和上级项目目录」时，必须写明一条例外：项目根下的 `.agents/skills/`。全部技能都在那里——HyperFrames 官方技能与随 `am` 二进制下发的 `text-to-lottie`、`algorithmic-art` 同处一个目录，路径由 `am` 解析后注入提示词。它在项目内但在镜头目录之外，会被「只在本镜头目录内工作」挡住；缺这条例外，渲染工具会拒读组合契约与动效手法，动画退化成只有淡入和位移。
 - 把完整的 `transcription-production.srt` 复制为镜头目录中的 `transcription.srt`，让渲染工具理解全文上下文。
 - 如果项目提供 `frame.md`，只把它当作画布、帧率和安全区等技术信息的来源；不得把其中的配色、字体、版式、示例图或动效文字当作创作命令。
 - 用户需要的图片、字体和脚本必须复制进使用它的镜头目录，以目录内相对路径引用；不得依赖镜头目录之外的文件或系统字体。
@@ -718,7 +718,7 @@ am review <候选成片> --scenes scenes/ --out production/review
 1. 封面沿用本片已经形成的视觉语汇与画面主体；配色、字体和构图由封面根据主题自由决定，定格在全片最有戏剧性、最能说明主题的一刻。标题用已确认的封面标题，必要时加一到两个短钩子（数字、反差），不新增片中没有的事实。
 2. 文件命名为 `covers/<平台>-<宽>x<高>.png`，例如 `covers/douyin-1440x1080.png`、`covers/bilibili-1920x1200.png`。源文件放在 `covers/src/<同名>/index.html`，各自是一个 `data-duration` 为 1 秒的 HyperFrames 合成。字体与脚本复制进各自目录、用目录内路径引用，不得用 `../` 引用目录外的文件，否则字体与脚本不会被加载。
 3. 每种比例分别构图，不要把一张缩放成另一张：横版通常文字在左、主体在右，竖版通常标题在上、主体在中、钩子在下。标题与主体都不得出画，文字不得压在主体上。
-4. 每张先跑 `npx --yes hyperframes@0.8.14 check covers/src/<目录>` 直到通过，再用 `snapshot --at 0.5` 出图，复制为上面的文件名，打开看一遍。
+4. 每张先跑 `npx --yes hyperframes@0.8.225 check covers/src/<目录>` 直到通过，再用 `snapshot --at 0.5` 出图，复制为上面的文件名，打开看一遍。
 5. 在 `publish.md` 的 `cover.images` 里逐张登记 `{platform, ratio, path, width_px, height_px}`，`cover.source_type` 写 `designed_image`；「封面文字」章节写出封面标题并列出每张图的路径。`am validate publish` 会按上表核对平台是否接受该比例、实测尺寸与比例、短边不小于 1080，并在 `ready` 时检查发布平台要的封面是否齐全。封面预览（`manual_checks.cover_preview`）仍需人工在平台上确认。
 
 ### 发布配置
