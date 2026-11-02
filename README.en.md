@@ -58,13 +58,17 @@ Chat is the main entry point. Studio starts the configured orchestrator (`ORCHES
 
 `am --unsafe studio` disables permission isolation just like `am --unsafe run`; see safe mode below.
 
-The browser regression flow lives in `internal/studio/e2e/` and requires Node.js 22+:
+The page has three panes: production stage, scenes, and the project file tree on the left; previews in the middle (scene output with frame stepping and region selection, the live scene composition with element picking, the final video, style examples, review contact sheets, and publish info); the chat on the right. A captured frame, a selected region, or a picked element can be attached to the next message. Beat-mode projects show the click track and a "confirm grid" button until the grid is confirmed.
+
+The frontend source lives in `internal/studio/ui/` (Vite + TypeScript + Preact). The build output is committed to `internal/studio/web/` and embedded with `go:embed`, so Go-only changes need no Node. Frontend changes need Node.js 22+:
 
 ```bash
-cd internal/studio/e2e
-npm install
+cd internal/studio/ui
+npm ci
+npm run dev        # dev server; API calls go to am studio on 127.0.0.1:4321
+npm run build      # writes ../web; commit it together with the source
 npx playwright install chromium
-AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm test
+AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm run test:e2e
 ```
 
 ### Visual direction

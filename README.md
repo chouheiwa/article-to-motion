@@ -58,13 +58,17 @@ am studio --listen 127.0.0.1:4317
 
 `am --unsafe studio` 与 `am --unsafe run` 一样关闭权限隔离，见下文「安全模式」。
 
-Studio 的浏览器回归测试位于 `internal/studio/e2e/`，需要 Node.js 22+：
+界面分三栏：左边是制作阶段、镜头列表和项目文件树；中间预览镜头产物（可逐帧步进、圈选区域）、镜头的合成页面（可点选元素）、成片、风格示例、复查联系表和发布信息；右边是对话。镜头截帧、圈出的区域和点选的元素都能附到下一条消息里。卡点项目在确认网格前，中间栏顶部会出现试听轨和「确认网格」按钮。
+
+前端源码在 `internal/studio/ui/`（Vite + TypeScript + Preact），构建产物提交在 `internal/studio/web/`，由 `go:embed` 打进二进制，所以只改 Go 代码不需要 Node。改了前端需要 Node.js 22+：
 
 ```bash
-cd internal/studio/e2e
-npm install
+cd internal/studio/ui
+npm ci
+npm run dev        # 开发服务器，接口转给本机 127.0.0.1:4321 上的 am studio
+npm run build      # 写入 ../web，连同源码一起提交
 npx playwright install chromium
-AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm test
+AM_STUDIO_E2E_CONFIG=/tmp/am-studio-projects.json npm run test:e2e
 ```
 
 ### 视觉方向

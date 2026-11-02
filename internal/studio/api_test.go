@@ -569,7 +569,13 @@ func TestStudioContentAndTaskEndpoints(t *testing.T) {
 	if body["code"] != "not_found" {
 		t.Fatalf("missing API = %#v", body)
 	}
+	// 带扩展名却不存在的文件直接 404：回落成 HTML 的话，浏览器只会报一个难懂的 MIME 错误。
 	status, raw = rawStudioGet(t, ts.URL+"/missing-asset.js")
+	if status != http.StatusNotFound {
+		t.Fatalf("missing asset = %d %q", status, raw)
+	}
+	// 不带扩展名的路径是前端路由，回落到 index.html。
+	status, raw = rawStudioGet(t, ts.URL+"/some/route")
 	if status != http.StatusOK || !strings.Contains(raw, "ArticleToMotion") {
 		t.Fatalf("static fallback = %d %q", status, raw)
 	}

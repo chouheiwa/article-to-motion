@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -23,7 +24,7 @@ import (
 	"github.com/chouheiwa/articale-to-motion/internal/project"
 )
 
-//go:embed web/*
+//go:embed web
 var webFiles embed.FS
 
 type Config struct {
@@ -197,6 +198,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/publish", s.publishAPI)
 	s.featureRoutes(mux)
 	s.sessionRoutes(mux)
+	s.uiRoutes(mux)
 	mux.HandleFunc("/", s.static)
 	return withJSONErrors(mux)
 }
@@ -676,19 +678,23 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := strings.TrimPrefix(filepath.Clean(r.URL.Path), "/")
-	if name == "." || name == "" {
+	// 不带扩展名的路径都回落到 index.html（前端路由）；带扩展名却找不到的直接 404，
+	// 否则缺失的脚本会拿到一份 HTML，浏览器报的是 MIME 错误，很难看出真正原因。
+	if name == "." || name == "" || filepath.Ext(name) == "" {
 		name = "index.html"
 	}
 	body, err := fs.ReadFile(webFiles, "web/"+name)
 	if err != nil {
-		body, err = fs.ReadFile(webFiles, "web/index.html")
-	}
-	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	if strings.HasSuffix(name, ".html") {
+	// 模块脚本必须带 JavaScript 的 MIME，靠内容嗅探会得到 text/plain，浏览器直接拒绝执行。
+	if kind := mime.TypeByExtension(filepath.Ext(name)); kind != "" {
+		w.Header().Set("Content-Type", kind)
+	}
+	if name == "index.html" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
 	}
 	w.Write(body)
 }

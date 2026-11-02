@@ -210,7 +210,19 @@ SVG 转 PNG 必须走 `rsvg-convert`（`internal/styleimage`），**不能用 Im
 | 项目路径一律用 `currentProject()` 返回的（已 `EvalSymlinks`） | macOS 的 `/var` 是 `/private/var` 的链接，两种写法会被当成两个项目，锁和会话都对不上 |
 | `/api/files` 与 `/preview/scenes/` 经 `containedPath` 解析（含符号链接），`.env` 一律不读 | 默认只监听回环地址，但手机经隧道访问时这两个接口就是对外的 |
 
-`internal/studio/e2e/fake-bin/claude` 是 e2e 用的假编排工具，`playwright.config.mjs` 只给 Studio 服务进程的 PATH 加上它。单元测试里的假工具同理，子进程环境按安全模式白名单构造，测试开关要经 `AM_PASSTHROUGH_ENV` 透传。
+### 前端
+
+源码在 `internal/studio/ui/`（Vite + TypeScript + Preact），`npm run build` 写进 `internal/studio/web/`，由 `//go:embed web` 打进二进制。
+
+| 约定 | 原因 |
+|---|---|
+| 构建产物提交进仓库，改了 `ui/src` 必须重新构建并一起提交 | 只改 Go 的人和 `go install` 的用户不需要 Node。CI 的 `studio-ui` job 重新构建后 `git diff internal/studio/web` 必须为空 |
+| 产物文件名固定（`assets/app.js`、`assets/index.css`），不带 hash | 带 hash 的话每次改动都换文件名，产物 diff 难读；`index.html` 发 `no-cache`，不靠文件名破缓存 |
+| `static` 只把不带扩展名的路径回落到 `index.html`，带扩展名找不到直接 404；JS 按扩展名设 MIME | 缺失的脚本拿到一份 HTML，浏览器只报模块 MIME 错误，看不出真正原因 |
+| `package-lock.json` 里的地址是 `registry.npmjs.org` | 用镜像装完依赖要把 `resolved` 换回官方源再提交，CI 访问不到国内镜像 |
+| `ui/src/types.ts` 与后端 JSON 字段一一对应 | 前后端之间没有生成代码，改字段两边一起改 |
+
+`internal/studio/ui/e2e/fake-bin/claude` 是 e2e 用的假编排工具，`ui/playwright.config.mjs` 只给 Studio 服务进程的 PATH 加上它；提示词里带「慢慢来」时它只回报会话然后挂起，供取消测试使用。单元测试里的假工具同理，子进程环境按安全模式白名单构造，测试开关要经 `AM_PASSTHROUGH_ENV` 透传。
 
 ## 新增一个 AI CLI
 
