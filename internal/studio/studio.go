@@ -303,7 +303,12 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) projectsAPI(w http.ResponseWriter, _ *http.Request) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	s.write(w, http.StatusOK, map[string]any{"projects": s.projects.Projects, "current_project_id": s.current})
+	projects := s.projects.Projects
+	if projects == nil {
+		// 前端按数组读；没有登记过项目时发 null 会让项目对话框直接崩掉。
+		projects = []Project{}
+	}
+	s.write(w, http.StatusOK, map[string]any{"projects": projects, "current_project_id": s.current})
 }
 
 type pathRequest struct {

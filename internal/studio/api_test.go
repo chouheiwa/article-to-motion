@@ -201,6 +201,9 @@ func TestStudioDirectoryAndProjectLifecycle(t *testing.T) {
 	if body["current_project_id"] != "" || len(studioList(t, body["projects"])) != 0 {
 		t.Fatalf("initial projects = %#v", body)
 	}
+	if _, ok := body["projects"].([]any); !ok {
+		t.Fatalf("没有项目时 projects 要是空数组，不能是 null: %#v", body["projects"])
+	}
 	status, body = studioRequest(t, http.MethodGet, ts.URL+"/api/workspaces/current", "")
 	requireStudioStatus(t, status, http.StatusOK, body)
 	if body["project"] != nil {

@@ -70,7 +70,7 @@ export function App() {
   const loadProjects = useCallback(async () => {
     try {
       const result = await api<{ projects: Project[]; current_project_id: string }>('/api/projects');
-      setProjects(result.projects);
+      setProjects(result.projects ?? []);
       setCurrentId(result.current_project_id);
       setConnected(true);
       return result.current_project_id;
@@ -85,7 +85,7 @@ export function App() {
   const loadSessions = useCallback(async () => {
     try {
       const result = await api<{ sessions: SessionMeta[]; busy: string }>('/api/sessions');
-      setSessions(result.sessions);
+      setSessions(result.sessions ?? []);
       setBusy(result.busy);
     } catch {
       setSessions([]);
@@ -102,7 +102,7 @@ export function App() {
       ]);
       setState(st);
       setScenes(sc.scenes ?? []);
-      setTree(tr.files);
+      setTree(tr.files ?? []);
       setBeat(bt);
       setVersion((v) => v + 1);
     } catch (err) {
@@ -114,7 +114,7 @@ export function App() {
   const loadTasks = useCallback(async () => {
     try {
       const result = await api<{ tasks: Task[] }>('/api/tasks');
-      setTasks(result.tasks.sort((a, b) => b.created_at.localeCompare(a.created_at)));
+      setTasks((result.tasks ?? []).sort((a, b) => b.created_at.localeCompare(a.created_at)));
     } catch {
       // 任务列表拿不到不影响其他功能。
     }

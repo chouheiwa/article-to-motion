@@ -85,14 +85,6 @@ func (s *Server) loadPersistedTasks() {
 	s.features.mu.Unlock()
 }
 
-func (s *Server) studioDir() string {
-	path := s.studioTasksPath()
-	if path == "" {
-		return ""
-	}
-	return filepath.Dir(path)
-}
-
 func (s *Server) persistTasksLocked() {
 	path := s.studioTasksPath()
 	if path == "" {

@@ -137,7 +137,7 @@ func TestNewSessionID(t *testing.T) {
 	if NewSessionID("codex") != "" || NewSessionID("opencode") != "" {
 		t.Fatal("codex / opencode 的 id 只能从流里读")
 	}
-	if NewSessionID("claude") == NewSessionID("claude") {
+	if first, second := NewSessionID("claude"), NewSessionID("claude"); first == second {
 		t.Fatal("id 应当随机")
 	}
 }
